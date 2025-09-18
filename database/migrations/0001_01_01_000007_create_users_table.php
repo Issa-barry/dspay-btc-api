@@ -14,19 +14,21 @@ return new class extends Migration
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('reference', 5)->unique();
-            $table->string('nom_complet');
-            $table->string('phone');
+            $table->string('nom', 100)->nullable();
+            $table->string('prenom', 150)->nullable();
+            $table->string('phone')->unique();
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
-            $table->foreignId('adresse_id')->constrained('adresses')->onDelete('cascade');
-            $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])->default('attente');
+             $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])->default('attente');
             $table->date('date_naissance')->default('9999-12-31');
             $table->enum('civilite', ['Mr', 'Mme', 'Mlle', 'Autre'])->default('Autre');
             $table->string('password'); 
             $table->foreignId('role_id')->constrained('roles')->onDelete('restrict')->default(1);
+             $table->foreignId('adresse_id')->nullable()->constrained('adresses')->nullOnDelete();
+
     
             // Ajout de la clé étrangère vers la table agences
-            $table->foreignId('agence_id')->nullable()->constrained('agences')->onDelete('set null');
+            // $table->foreignId('agence_id')->nullable()->constrained('agences')->onDelete('set null');
     
             $table->rememberToken(); 
             $table->timestamps();

@@ -26,13 +26,22 @@ class User extends Authenticatable implements MustVerifyEmail
         'password',
         'reference',
         'civilite',
-        'nom_complet',
+        'nom',
+        'prenom',
         'phone',
         'date_naissance',
         'adresse_id',
         'role_id', 
-        'agence_id',
+        // 'agence_id',
     ];
+
+       // Expose le nom complet en lecture seule (virtuel) pour compatibilité
+    protected $appends = ['nom_complet'];
+
+    public function getNomCompletAttribute(): string
+    {
+        return trim(implode(' ', array_filter([$this->prenom, $this->nom])));
+    }
 
     public function role()
     {
@@ -44,16 +53,16 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->belongsTo(Adresse::class);
     }
 
-    public function agence()
-    {
-        return $this->belongsTo(Agence::class);
-    }
+    // public function agence()
+    // {
+    //     return $this->belongsTo(Agence::class);
+    // }
 
     // Relation to include role data
-    public function getRoleAttribute()
-    {
-        return $this->roles->pluck('name')->first(); // Return the first role name as string
-    }
+    // public function getRoleAttribute()
+    // {
+    //     return $this->roles->pluck('name')->first(); // Return the first role name as string
+    // }
    
     /**
      * The attributes that should be hidden for serialization.
@@ -88,7 +97,7 @@ class User extends Authenticatable implements MustVerifyEmail
             // Supprime l'adresse associée si elle existe
             if ($user->adresse) {
                 $user->adresse->delete();
-            }
+            } 
         });
     }
 

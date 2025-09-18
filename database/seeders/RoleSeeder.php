@@ -27,6 +27,6 @@ class RoleSeeder extends Seeder
         $this->command->info('Les rôles ont été créés avec succès !');
     }
 
-    // php artisan db:seed --class=RoleSeeder
+    // 1) php artisan db:seed --class=RoleSeeder
 
 }

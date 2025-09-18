@@ -20,7 +20,7 @@ return new class extends Migration
             $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])->default('attente');
             $table->timestamp('date_creation')->default(now());
             $table->foreignId('adresse_id')->constrained('adresses')->onDelete('cascade');
-            $table->foreignId('responsable_id')->nullable()->constrained('users')->onDelete('set null');
+            // $table->foreignId('responsable_id')->nullable()->constrained('users')->onDelete('set null');
             $table->timestamps();
         });
     }

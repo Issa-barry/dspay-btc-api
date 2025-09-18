@@ -52,7 +52,6 @@ use App\Http\Controllers\User\UserDesacfecterAgenceController;
 
 use App\Http\Controllers\Transfert\TransfertStatistiqueController;
 
-
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail'])->middleware('auth:sanctum');
@@ -83,21 +82,51 @@ Route::delete('conversions/{conversion}', [ConversionController::class, 'destroy
  * USER  
  * 
  * ********************************************************/
+use App\Http\Controllers\User\Employe\EmployeCreateController;
+use App\Http\Controllers\User\Client\ClientCreateController;
+
+
+
+// affectation
 Route::post('/users/affecterByReference/{id}', [UserAffecterAgenceController::class, 'affecterParReferenceAgence']);
 Route::post('/users/affecter-agence/{id}', [UserAffecterAgenceController::class, 'affecterAgence']);
 Route::delete('/users/desaffecter-agence/{id}', [UserDesacfecterAgenceController::class, 'desaffecterAgence']);
-Route::post('/users/create', [CreateUserController::class, 'store']);
-Route::get('/users/all', [ShowUserController::class, 'index']);
-Route::get('/users/getById/{id}', [ShowUserController::class, 'getById']);
-Route::put('/users/updateById/{id}', [updateUserController::class, 'updateById']);
-Route::delete('/users/delateById/{id}', [DeleteUserController::class, 'delateById']);
+// Crud
+Route::prefix('users')->group(function () {
+Route::post('/clients/create', [ClientCreateController::class, 'store']);//client
+Route::post('/employes/create', [EmployeCreateController::class, 'store']);//Employe
+Route::get('/all', [ShowUserController::class, 'index']);
+Route::get('/getById/{id}', [ShowUserController::class, 'getById']);
+Route::put('/updateById/{id}', [updateUserController::class, 'updateById']);
+Route::delete('/delateById/{id}', [DeleteUserController::class, 'delateById']);
+});
+
+
 
 use App\Http\Controllers\User\UserStatutController;
 
 Route::patch('/users/{id}/statutUpdate', [UserStatutController::class, 'updateStatut']);
 
-
-
+/**********************************************************
+ *   
+ * BENEFICIAIRE  
+ * 
+ * ********************************************************/
+  use App\Http\Controllers\Beneficiaire\{
+    BeneficiaireDeleteController,
+    BeneficiaireIndexController,
+    BeneficiaireStoreController,
+    BeneficiaireUpdateController
+};
+ 
+ 
+Route::middleware(['auth:sanctum', 'throttle:60,1'])->prefix('beneficiaires')->group(function () {
+        Route::get('all',   [BeneficiaireIndexController::class, 'index'])->name('index');
+        Route::get('getById/{id}', [BeneficiaireIndexController::class, 'getById']);
+        Route::post('create', [BeneficiaireStoreController::class, 'store']);
+        Route::put('updateById/{id}', [BeneficiaireUpdateController::class, 'updateById']);
+        Route::delete('deleteById/{id}', [BeneficiaireDeleteController::class, 'deleteById']);
+    });
 /**********************************************************
  *   
  * AGENCE 

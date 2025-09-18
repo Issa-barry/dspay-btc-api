@@ -4,15 +4,16 @@ namespace App\Http\Controllers\Transfert;
 
 use App\Http\Controllers\Controller;
 use App\Mail\TransfertNotification;
-use App\Models\Devise;
 use App\Models\Facture;
 use App\Models\Frais;
 use App\Models\TauxEchange;
 use App\Models\Transfert;
 use App\Traits\JsonResponseTrait;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 use Exception;
 
 class TransfertEnvoieController extends Controller
@@ -20,146 +21,133 @@ class TransfertEnvoieController extends Controller
     use JsonResponseTrait;
 
     /**
-     * Créer un transfert de devise en utilisant un taux existant et en appliquant les frais spécifiques.
+     * Créer un transfert EUR -> GNF avec un taux d'échange existant.
      */
     public function store(Request $request)
     {
-        // Validation de la requête
-        $validated = $this->validateRequest($request);
-        if ($validated->fails()) {
-            return $this->responseJson(false, 'Validation échouée.', $validated->errors(), 422);
+        // Auth obligatoire
+        $userId = $request->user()?->id ?? Auth::id();
+        if (!$userId) {
+            return $this->responseJson(false, 'Non authentifié.', null, 401);
+        }
+
+        // Validation
+        $validator = $this->validateRequest($request);
+        if ($validator->fails()) {
+            return $this->responseJson(false, 'Validation échouée.', $validator->errors(), 422);
         }
 
         try {
-            // Récupérer les données nécessaires
+            // Taux
             $tauxEchange = TauxEchange::findOrFail($request->taux_echange_id);
-            $deviseSource = Devise::findOrFail($tauxEchange->devise_source_id);
-            $deviseCible = Devise::findOrFail($tauxEchange->devise_cible_id);
+            $taux = (float)$tauxEchange->taux;
 
-            // Calcul du montant converti
-            $montantConverti = $request->montant_expediteur * $tauxEchange->taux;
+            // Montants
+            $montantEuro = (float)$request->montant_euro;
+            $montantGnf  = round($montantEuro * $taux, 2);
 
-            // Calcul des frais basés sur le montant
-            $frais = $this->calculerFrais($request->montant_expediteur);
-            $total = $request->montant_expediteur + $frais;
+            // Frais / total (sur le montant EUR)
+            $frais = $this->calculerFrais($montantEuro);
+            $total = $montantEuro + $frais;
 
-            // Créer les données du transfert
-            $transfertData = $this->mapTransfertData($request, $tauxEchange, $deviseSource, $deviseCible, $montantConverti, $frais, $total);
-            $transfertData['agent_id'] = auth('sanctum')->id() ?? auth('api')->id(); // Ajout de l'agent connecté
+            // Données à persister
+            $transfertData = [
+                'user_id'          => $userId,                       // expéditeur = user connecté
+                'beneficiaire_id'  => (int)$request->beneficiaire_id, // receveur = bénéficiaire choisi
 
-            // Créer le transfert
+                'devise_source_id' => 1, // EUR
+                'devise_cible_id'  => 2, // GNF
+
+                'taux_echange_id'  => $tauxEchange->id,
+                'taux_applique'    => $taux,
+
+                'montant_euro'     => $montantEuro,
+                'montant_gnf'      => $montantGnf,
+
+                'frais'            => (int)$frais,
+                'total'            => $total,
+
+                'statut'           => 'en_cours',
+                'code'             => Transfert::generateUniqueCode(),
+            ];
+
             $transfert = Transfert::create($transfertData);
 
-            // Créer la facture associée
+            // Facture associée
             $this->createFacture($transfert);
- 
-            // Envoyer un email de confirmation
+
+            // (Optionnel) mail à l’expéditeur si l’utilisateur a un email
             $this->envoyerEmailConfirmation($transfert);
 
-            // Retourner une réponse JSON avec succès
-            return $this->responseJson(true, 'Transfert effectué avec succès.', [
-                'transfert' => $transfert,
-                'agent' => $transfert->agent ? $transfert->agent->nom_complet : 'Non assigné'
-            ], 201);
+            return $this->responseJson(true, 'Transfert effectué avec succès.', $transfert->fresh(), 201);
+
+        } catch (ValidationException $e) {
+            return $this->responseJson(false, 'Échec de la validation des données.', $e->errors(), 422);
+
         } catch (Exception $e) {
             return $this->responseJson(false, 'Erreur lors de la création du transfert.', ['message' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * Valider les données de la requête.
+     * Règles de validation (nouvelle structure).
      */
     private function validateRequest(Request $request)
     {
         return Validator::make($request->all(), [
-            'taux_echange_id' => 'required|exists:taux_echanges,id',
-            'montant_expediteur' => 'required|numeric|min:1',
-            'quartier' => 'nullable|string',
-            'receveur_nom_complet' => 'required|string|max:255',
-            'receveur_phone' => 'required|string|max:20',
-            'expediteur_nom_complet' => 'required|string|max:255',
-            'expediteur_phone' => 'required|string|max:20',
-            'expediteur_email' => 'required|email|max:255',
+            'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
+            'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
+            'montant_euro'    => ['required', 'numeric', 'min:1', 'max:1000'], // limite 1000 €
         ]);
     }
 
     /**
-     * Calculer les frais du transfert selon les bornes et type.
+     * Calcul de frais selon bornes (table frais).
      */
-    private function calculerFrais($montant)
+    private function calculerFrais(float $montantEuro): int|float
     {
-        // Rechercher le frais correspondant au montant du transfert
-        $frais = Frais::where('montant_min', '<=', $montant)
-                      ->where(function ($query) use ($montant) {
-                          $query->where('montant_max', '>=', $montant)
-                                ->orWhereNull('montant_max'); // Si null, pas de limite supérieure
-                      })
-                      ->orderBy('montant_min', 'asc') // Assurer l'ordre croissant
-                      ->first();
+        $frais = Frais::where('montant_min', '<=', $montantEuro)
+            ->where(function ($q) use ($montantEuro) {
+                $q->where('montant_max', '>=', $montantEuro)
+                  ->orWhereNull('montant_max');
+            })
+            ->orderBy('montant_min', 'asc')
+            ->first();
 
-        // Si aucun frais n'est trouvé, retourner 0
-        if (!$frais) {
-            return 0;
-        }
+        if (!$frais) return 0;
 
-        // Calculer les frais en fonction du type (fixe ou pourcentage)
-        if ($frais->type === 'pourcentage') {
-            return max(1, $montant * ($frais->valeur / 100)); // Applique le pourcentage
-        }
-
-        return $frais->valeur; // Applique les frais fixes
+        return $frais->type === 'pourcentage'
+            ? max(1, $montantEuro * ($frais->valeur / 100))
+            : (float)$frais->valeur;
     }
 
     /**
-     * Mapper les données du transfert.
+     * Créer la facture liée.
      */
-    private function mapTransfertData($request, $tauxEchange, $deviseSource, $deviseCible, $montantConverti, $frais, $total)
-    {
-        return [
-            'devise_source_id' => $deviseSource->id,
-            'devise_cible_id' => $deviseCible->id,
-            'montant_expediteur' => $request->montant_expediteur,
-            'montant_receveur' => $montantConverti,
-            'frais' => $frais,
-            'total' => $total,
-            'quartier' => $request->quartier,
-            'receveur_nom_complet' => $request->receveur_nom_complet,
-            'receveur_phone' => $request->receveur_phone,
-            'expediteur_nom_complet' => $request->expediteur_nom_complet,
-            'expediteur_phone' => $request->expediteur_phone,
-            'expediteur_email' => $request->expediteur_email,
-            'taux_echange_id' => $tauxEchange->id,
-            'statut' => 'en_cours',
-            'code' => Transfert::generateUniqueCode(),
-        ];
-    }
-
-    /**
-     * Créer une facture pour un transfert donné.
-     */
-    private function createFacture(Transfert $transfert)
+    private function createFacture(Transfert $transfert): void
     {
         Facture::create([
-            'transfert_id' => $transfert->id,
-            'type' => 'transfert',
-            'statut' => 'brouillon',
-            'envoye' => false,
-            'nom_societe' => 'FELLO',
-            'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
-            'phone_societe' => 'Numéro de téléphone de la société',
-            'email_societe' => 'contact@societe.com',
-            'total' => $transfert->total,
-            'montant_du' => $transfert->total
+            'transfert_id'   => $transfert->id,
+            'type'           => 'transfert',
+            'statut'         => 'brouillon',
+            'envoye'         => false,
+            'nom_societe'    => 'FELLO',
+            'adresse_societe'=> '5 allé du Foehn Ostwald 67540, Strasbourg.',
+            'phone_societe'  => 'Numéro de téléphone de la société',
+            'email_societe'  => 'contact@societe.com',
+            'total'          => $transfert->total,
+            'montant_du'     => $transfert->total,
         ]);
     }
 
     /**
-     * Envoyer un email de confirmation du transfert.
+     * Envoi email (optionnel) à l’utilisateur connecté s’il a un email.
      */
-    private function envoyerEmailConfirmation(Transfert $transfert)
+    private function envoyerEmailConfirmation(Transfert $transfert): void
     {
-        if (!empty($transfert->expediteur_email)) {
-            Mail::to($transfert->expediteur_email)->send(new TransfertNotification($transfert));
+        $email = $transfert->expediteur?->email; // relation user via user_id
+        if ($email) {
+            Mail::to($email)->send(new TransfertNotification($transfert));
         }
     }
 }

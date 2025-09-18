@@ -13,29 +13,39 @@ return new class extends Migration
     {
         Schema::create('transferts', function (Blueprint $table) {
             $table->id();
-            // Informations de transfert
-            $table->decimal('montant_expediteur', 15, 2);
-            $table->decimal('montant_receveur', 15, 2);
-            $table->decimal('total', 15, 2);
+
+            // Liens expéditeur / bénéficiaire
+            $table->foreignId('user_id')->constrained('users')->cascadeOnDelete();
+            $table->foreignId('beneficiaire_id')->constrained('beneficiaires')->restrictOnDelete();
+
+            // Devises (EUR -> GNF)
+            $table->foreignId('devise_source_id')
+                  ->default(1) // EUR
+                  ->constrained('devises')
+                  ->restrictOnDelete();
+
+            $table->foreignId('devise_cible_id')
+                  ->default(2) // GNF
+                  ->constrained('devises')
+                  ->restrictOnDelete();
+
+            // Taux : lien + snapshot de la valeur appliquée
+            $table->foreignId('taux_echange_id')
+                  ->nullable()
+                  ->constrained('taux_echanges')
+                  ->nullOnDelete();
+
+            $table->decimal('taux_applique', 18, 6); // fige le taux au moment du transfert
+
+            // Montants
+            $table->decimal('montant_euro', 15, 2);
+            $table->decimal('montant_gnf', 15, 2);
             $table->integer('frais')->default(0);
-            $table->string('code', 255)->unique();  // Code unique pour chaque transfert
-            $table->string('statut')->default('en_cours'); // Défaut: en_cours
-            $table->string('quartier')->nullable();
+            $table->decimal('total', 15, 2);
 
-            // Informations sur le receveur
-            $table->string('receveur_nom_complet');
-            $table->string('receveur_phone');
-
-            // Informations sur l'expéditeur
-            $table->string('expediteur_nom_complet');
-            $table->string('expediteur_phone');
-            $table->string('expediteur_email')->nullable();
-
-            // liens
-            $table->foreignId('devise_source_id')->constrained('devises')->onDelete('cascade');
-            $table->foreignId('devise_cible_id')->constrained('devises')->onDelete('cascade');
-            $table->foreignId('taux_echange_id')->nullable()->constrained('taux_echanges')->onDelete('set null');
-            $table->foreignId('agent_id')->nullable()->constrained('users')->onDelete('set null');
+            // Divers
+            $table->string('code', 16)->unique();
+            $table->string('statut')->default('en_cours');
 
             $table->timestamps();
         });
