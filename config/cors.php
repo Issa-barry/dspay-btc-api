@@ -19,7 +19,7 @@ return [
 
     'allowed_methods' => ['*'], // Permet toutes les méthodes HTTP (GET, POST, etc.)
 
-    'allowed_origins' => ['http://localhost:4200','https://ftf-preprod.ibarry.fr',], // Autoriser votre frontend Angular
+     'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', '')),// Autoriser votre frontend Angular
 
     'allowed_origins_patterns' => [],
 
