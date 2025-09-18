@@ -57,7 +57,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/resend-verification-email', [AuthController::class, 'resendVerificationEmail'])->middleware('auth:sanctum');
 Route::post('/ResetPassword', [AuthController::class, 'resetPassword']);
 Route::post('/sendResetPasswordLink', [AuthController::class, 'sendResetPasswordLink']);
-Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])->name('verification.verify');
+// Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])->name('verification.verify');
+Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])->middleware(['signed'])->name('verification.verify');
+
 // Route::post('resend-verification-email', [AuthController::class, 'resendVerificationEmail']);
 
 Route::middleware('auth:sanctum')->group(function () {

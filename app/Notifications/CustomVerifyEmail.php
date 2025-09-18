@@ -11,21 +11,21 @@ class CustomVerifyEmail extends BaseVerifyEmail
 {
     protected function verificationUrl($notifiable)
     {
-        // lien signé Laravel (backend)
+        // 1) Lien signé backend (utilise APP_URL)
         $backendUrl = URL::temporarySignedRoute(
             'verification.verify',
             Carbon::now()->addMinutes(60),
-            ['id' => $notifiable->getKey(), 'hash' => sha1($notifiable->getEmailForVerification())]
+            [
+                'id'   => $notifiable->getKey(),
+                'hash' => sha1($notifiable->getEmailForVerification()),
+            ]
         );
 
-        // lien front pour ton app (comme sur ta capture)
-        $frontend = rtrim(config('app.frontend_url', env('FRONTEND_URL', '')), '/');
-        if ($frontend) {
-            return $frontend . '/auth/validation?redirect=' . urlencode($backendUrl);
-        }
+        // 2) URL front complète (déjà /auth/validation)
+        $frontend = rtrim(config('app.frontend_verify_email_url', env('FRONTEND_VERIFY_EMAIL_URL', '')), '/');
 
-        // fallback : lien backend direct
-        return $backendUrl;
+        // 3) On renvoie /auth/validation?redirect=<signed>
+        return $frontend . '?redirect=' . urlencode($backendUrl);
     }
 
     public function toMail($notifiable)
