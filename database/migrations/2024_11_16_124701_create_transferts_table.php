@@ -24,10 +24,12 @@ return new class extends Migration
             $table->unsignedInteger('taux_applique'); // ex: 10700
 
             // Montants
-            $table->decimal('montant_euro', 15, 2);      // € avec 2 décimales
-            $table->unsignedBigInteger('montant_gnf');   // GNF entier
-            $table->unsignedInteger('frais')->default(0);// GNF entier
-            $table->unsignedBigInteger('total');         // GNF entier
+            $table->decimal('montant_euro', 15, 2);        // Montant saisi en €
+            $table->decimal('frais_eur', 10, 2)->default(0); // Frais en € (jamais convertis)
+            $table->decimal('total_eur', 12, 2);           // montant_euro + frais_eur (en €)
+
+            $table->unsignedBigInteger('montant_gnf');     // Montant reçu (GNF entier)
+            $table->unsignedBigInteger('total_gnf');       // = montant_gnf (pas de frais en GNF)
 
             // Divers
             $table->string('code', 16)->unique();

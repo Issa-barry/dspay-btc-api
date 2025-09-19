@@ -6,8 +6,8 @@
     <title>Détails de votre transfert</title>
     <style>
         body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; background:#f8f9fa; color:#343a40; padding:20px; }
-        h1 { color:#007bff; margin-bottom: 6px; }
-        .logo_name { color:#007bff; font-weight:900; }
+        h1 { color:#6366F1; margin-bottom: 6px; }
+        .logo_name { color:#6366F1; font-weight:900; }
         table { width:100%; border-collapse:collapse; margin-top:20px; background:#fff; }
         table, th, td { border:1px solid #dee2e6; }
         th, td { padding:10px; text-align:left; }
@@ -43,7 +43,7 @@
         </tr>  --}}
          <tr>
             <th>Total débité</th>
-            <td><strong>{{ number_format((float)($transfert->total ?? ($transfert->montant_euro + ($transfert->frais ?? 0))), 2, ',', ' ') }} {{ $devSrc }}</strong></td>
+            <td><strong>{{ number_format((float)($transfert->total ?? ($transfert->total_eur + ($transfert->frais ?? 0))), 2, ',', ' ') }} {{ $devSrc }}</strong></td>
         </tr>
 {{--          
         <tr>
