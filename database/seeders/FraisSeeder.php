@@ -27,4 +27,6 @@ class FraisSeeder extends Seeder
             );
         }
     }
+
+    // php artisan db:seed --class=FraisSeeder
 }
