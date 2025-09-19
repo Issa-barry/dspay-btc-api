@@ -8,6 +8,7 @@ use App\Models\Devise;
 use App\Traits\JsonResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Database\QueryException;
 
 class TauxCreateController extends Controller
 {
@@ -15,44 +16,52 @@ class TauxCreateController extends Controller
 
     /**
      * Créer un nouveau taux de change avec IDs.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
      */
     public function createById(Request $request)
     {
         try {
-            // Validation des données d'entrée
+            // Validation (taux ENTIER strictement positif)
             $validated = $request->validate([
-                'devise_source_id' => 'required|integer|exists:devises,id',
-                'devise_cible_id' => 'required|integer|exists:devises,id',
-                'taux' => 'required|numeric|min:0',
+                'devise_source_id' => ['required', 'integer', 'exists:devises,id'],
+                'devise_cible_id'  => ['required', 'integer', 'exists:devises,id'],
+                'taux'             => ['required', 'integer', 'min:1'],
             ]);
 
-            // Vérifier que les devises sont différentes
-            if ($validated['devise_source_id'] === $validated['devise_cible_id']) {
+            // Devises différentes
+            if ((int)$validated['devise_source_id'] === (int)$validated['devise_cible_id']) {
                 return $this->responseJson(false, 'Les devises source et cible doivent être différentes.', null, 400);
             }
 
-            // Vérifier si un taux existe déjà dans les deux sens
-            $existingTaux = TauxEchange::where(function ($query) use ($validated) {
-                $query->where('devise_source_id', $validated['devise_source_id'])
-                      ->where('devise_cible_id', $validated['devise_cible_id']);
-            })->orWhere(function ($query) use ($validated) {
-                $query->where('devise_source_id', $validated['devise_cible_id'])
-                      ->where('devise_cible_id', $validated['devise_source_id']);
+            // Un taux existe-t-il déjà dans un sens ou l’autre ?
+            $existingTaux = TauxEchange::where(function ($q) use ($validated) {
+                $q->where('devise_source_id', $validated['devise_source_id'])
+                  ->where('devise_cible_id',  $validated['devise_cible_id']);
+            })->orWhere(function ($q) use ($validated) {
+                $q->where('devise_source_id', $validated['devise_cible_id'])
+                  ->where('devise_cible_id',  $validated['devise_source_id']);
             })->first();
 
             if ($existingTaux) {
                 return $this->responseJson(false, 'Un taux de change entre ces deux devises existe déjà.', null, 409);
             }
 
-            // Création du taux de change
-            $tauxEchange = TauxEchange::create($validated);
+            // Création
+            $tauxEchange = TauxEchange::create([
+                'devise_source_id' => (int) $validated['devise_source_id'],
+                'devise_cible_id'  => (int) $validated['devise_cible_id'],
+                'taux'             => (int) $validated['taux'],
+            ]);
 
             return $this->responseJson(true, 'Taux de change créé avec succès.', $tauxEchange, 201);
+
         } catch (ValidationException $e) {
             return $this->responseJson(false, 'Erreur de validation.', $e->errors(), 422);
+        } catch (QueryException $e) {
+            // Conflit d’unicité (même paire)
+            if ($e->getCode() === '23000') {
+                return $this->responseJson(false, 'Un taux de change pour cette paire existe déjà.', null, 409);
+            }
+            return $this->responseJson(false, 'Erreur base de données.', $e->getMessage(), 500);
         } catch (\Exception $e) {
             return $this->responseJson(false, 'Erreur lors de la création du taux de change.', $e->getMessage(), 500);
         }
@@ -60,56 +69,59 @@ class TauxCreateController extends Controller
 
     /**
      * Créer un nouveau taux de change avec noms des devises.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
      */
     public function storeByName(Request $request)
     {
         try {
-            // Validation des données d'entrée
+            // Validation (taux ENTIER strictement positif)
             $validated = $request->validate([
-                'devise_source' => 'required|string|exists:devises,nom',
-                'devise_cible' => 'required|string|exists:devises,nom',
-                'taux' => 'required|numeric|min:0',
+                'devise_source' => ['required', 'string', 'exists:devises,nom'],
+                'devise_cible'  => ['required', 'string', 'exists:devises,nom'],
+                'taux'          => ['required', 'integer', 'min:1'],
             ]);
 
             // Récupération des devises
             $deviseSource = Devise::where('nom', $validated['devise_source'])->first();
-            $deviseCible = Devise::where('nom', $validated['devise_cible'])->first();
+            $deviseCible  = Devise::where('nom', $validated['devise_cible'])->first();
 
             if (!$deviseSource || !$deviseCible) {
                 return $this->responseJson(false, 'Une ou plusieurs devises ne sont pas valides.', null, 400);
             }
 
-            // Vérifier que les devises sont différentes
+            // Devises différentes
             if ($deviseSource->id === $deviseCible->id) {
                 return $this->responseJson(false, 'Les devises source et cible doivent être différentes.', null, 400);
             }
 
-            // Vérifier si un taux existe déjà dans les deux sens
-            $existingTaux = TauxEchange::where(function ($query) use ($deviseSource, $deviseCible) {
-                $query->where('devise_source_id', $deviseSource->id)
-                      ->where('devise_cible_id', $deviseCible->id);
-            })->orWhere(function ($query) use ($deviseSource, $deviseCible) {
-                $query->where('devise_source_id', $deviseCible->id)
-                      ->where('devise_cible_id', $deviseSource->id);
+            // Un taux existe-t-il déjà dans un sens ou l’autre ?
+            $existingTaux = TauxEchange::where(function ($q) use ($deviseSource, $deviseCible) {
+                $q->where('devise_source_id', $deviseSource->id)
+                  ->where('devise_cible_id',  $deviseCible->id);
+            })->orWhere(function ($q) use ($deviseSource, $deviseCible) {
+                $q->where('devise_source_id', $deviseCible->id)
+                  ->where('devise_cible_id',  $deviseSource->id);
             })->first();
 
             if ($existingTaux) {
                 return $this->responseJson(false, 'Un taux de change entre ces deux devises existe déjà.', null, 409);
             }
 
-            // Création du taux de change
+            // Création
             $tauxEchange = TauxEchange::create([
-                'devise_source_id' => $deviseSource->id,
-                'devise_cible_id' => $deviseCible->id,
-                'taux' => $validated['taux'],
+                'devise_source_id' => (int) $deviseSource->id,
+                'devise_cible_id'  => (int) $deviseCible->id,
+                'taux'             => (int) $validated['taux'],
             ]);
 
             return $this->responseJson(true, 'Taux de change créé avec succès.', $tauxEchange, 201);
+
         } catch (ValidationException $e) {
             return $this->responseJson(false, 'Erreur de validation.', $e->errors(), 422);
+        } catch (QueryException $e) {
+            if ($e->getCode() === '23000') {
+                return $this->responseJson(false, 'Un taux de change pour cette paire existe déjà.', null, 409);
+            }
+            return $this->responseJson(false, 'Erreur base de données.', $e->getMessage(), 500);
         } catch (\Exception $e) {
             return $this->responseJson(false, 'Erreur lors de la création du taux de change.', $e->getMessage(), 500);
         }

@@ -14,6 +14,9 @@ class TauxEchange extends Model
         'taux',
     ];
 
+    protected $casts = ['taux' => 'integer'];
+
+
     // Relation avec le modèle Devise (devise source)
     public function deviseSource()
     {

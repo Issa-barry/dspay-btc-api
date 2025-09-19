@@ -13,12 +13,21 @@ return new class extends Migration
     {
         Schema::create('taux_echanges', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('devise_source_id')->constrained('devises');
-            $table->foreignId('devise_cible_id')->constrained('devises');
-            $table->decimal('taux', 12, 4); // Le taux de conversion, précision 4 décimales
+
+            $table->foreignId('devise_source_id')
+                  ->constrained('devises')
+                  ->restrictOnDelete();
+
+            $table->foreignId('devise_cible_id')
+                  ->constrained('devises')
+                  ->restrictOnDelete();
+
+            // Taux ENTIER (ex: 10700 = 1 EUR -> 10 700 GNF)
+            $table->unsignedInteger('taux');
+
             $table->timestamps();
 
-            // Index pour une recherche rapide des taux entre devises
+            // Un seul taux par paire (source, cible)
             $table->unique(['devise_source_id', 'devise_cible_id']);
         });
     }

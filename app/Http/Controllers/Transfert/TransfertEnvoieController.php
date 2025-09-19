@@ -21,7 +21,7 @@ class TransfertEnvoieController extends Controller
     use JsonResponseTrait;
 
     /**
-     * Créer un transfert EUR -> GNF avec un taux d'échange existant.
+     * Créer un transfert EUR -> GNF (GNF stocké en ENTIER).
      */
     public function store(Request $request)
     {
@@ -38,45 +38,43 @@ class TransfertEnvoieController extends Controller
         }
 
         try {
-            // Taux
+            // 1) Taux (ENTIER)
             $tauxEchange = TauxEchange::findOrFail($request->taux_echange_id);
-            $taux = (float)$tauxEchange->taux;
+            $taux = (int) $tauxEchange->taux; // ex: 10700
 
-            // Montants
-            $montantEuro = (float)$request->montant_euro;
-            $montantGnf  = round($montantEuro * $taux, 2);
+            // 2) Montants
+            $montantEuro = (float) $request->montant_euro;
 
-            // Frais / total (sur le montant EUR)
-            $frais = $this->calculerFrais($montantEuro);
-            $total = $montantEuro + $frais;
+            // 3) Conversion GNF (entiers)
+            $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
 
-            // Données à persister
-            $transfertData = [
-                'user_id'          => $userId,                       // expéditeur = user connecté
-                'beneficiaire_id'  => (int)$request->beneficiaire_id, // receveur = bénéficiaire choisi
+            // 4) Frais: calcul en EUR -> conversion en GNF (entier)
+            $fraisEuro = $this->calculerFraisEuro($montantEuro);
+            $fraisGnf  = (int) round($fraisEuro * $taux, 0, PHP_ROUND_HALF_UP);
 
+            // 5) Total GNF (entier)
+            $totalGnf = $montantGnf + $fraisGnf;
+
+            // 6) Persistance
+            $transfert = Transfert::create([
+                'user_id'          => $userId,
+                'beneficiaire_id'  => (int) $request->beneficiaire_id,
                 'devise_source_id' => 1, // EUR
                 'devise_cible_id'  => 2, // GNF
-
                 'taux_echange_id'  => $tauxEchange->id,
-                'taux_applique'    => $taux,
-
-                'montant_euro'     => $montantEuro,
-                'montant_gnf'      => $montantGnf,
-
-                'frais'            => (int)$frais,
-                'total'            => $total,
-
-                'statut'           => 'en_cours',
+                'taux_applique'    => $taux,        // ENTIER
+                'montant_euro'     => $montantEuro, // DECIMAL(15,2)
+                'montant_gnf'      => $montantGnf,  // ENTIER
+                'frais'            => $fraisGnf,    // ENTIER
+                'total'            => $totalGnf,    // ENTIER
+                'statut'           => 'envoyé',
                 'code'             => Transfert::generateUniqueCode(),
-            ];
+            ]);
 
-            $transfert = Transfert::create($transfertData);
-
-            // Facture associée
+            // 7) Facture liée (montants en GNF)
             $this->createFacture($transfert);
 
-            // (Optionnel) mail à l’expéditeur si l’utilisateur a un email
+            // 8) Email (optionnel)
             $this->envoyerEmailConfirmation($transfert);
 
             return $this->responseJson(true, 'Transfert effectué avec succès.', $transfert->fresh(), 201);
@@ -85,26 +83,27 @@ class TransfertEnvoieController extends Controller
             return $this->responseJson(false, 'Échec de la validation des données.', $e->errors(), 422);
 
         } catch (Exception $e) {
+            \Log::error('Transfert KO', ['err' => $e->getMessage()]);
             return $this->responseJson(false, 'Erreur lors de la création du transfert.', ['message' => $e->getMessage()], 500);
         }
     }
 
     /**
-     * Règles de validation (nouvelle structure).
+     * Règles de validation (EUR saisi, GNF dérivé).
      */
     private function validateRequest(Request $request)
     {
         return Validator::make($request->all(), [
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
-            'montant_euro'    => ['required', 'numeric', 'min:1', 'max:1000'], // limite 1000 €
+            'montant_euro'    => ['required', 'numeric', 'min:1', 'max:1000'],
         ]);
     }
 
     /**
-     * Calcul de frais selon bornes (table frais).
+     * Calcule les frais en EUR selon la table "frais".
      */
-    private function calculerFrais(float $montantEuro): int|float
+    private function calculerFraisEuro(float $montantEuro): float
     {
         $frais = Frais::where('montant_min', '<=', $montantEuro)
             ->where(function ($q) use ($montantEuro) {
@@ -114,29 +113,29 @@ class TransfertEnvoieController extends Controller
             ->orderBy('montant_min', 'asc')
             ->first();
 
-        if (!$frais) return 0;
+        if (!$frais) return 0.0;
 
         return $frais->type === 'pourcentage'
-            ? max(1, $montantEuro * ($frais->valeur / 100))
-            : (float)$frais->valeur;
+            ? max(1.0, $montantEuro * ((float) $frais->valeur / 100.0))
+            : (float) $frais->valeur;
     }
 
     /**
-     * Créer la facture liée.
+     * Créer la facture liée (montants en GNF).
      */
     private function createFacture(Transfert $transfert): void
     {
         Facture::create([
-            'transfert_id'   => $transfert->id,
-            'type'           => 'transfert',
-            'statut'         => 'brouillon',
-            'envoye'         => false,
-            'nom_societe'    => 'FELLO',
-            'adresse_societe'=> '5 allé du Foehn Ostwald 67540, Strasbourg.',
-            'phone_societe'  => 'Numéro de téléphone de la société',
-            'email_societe'  => 'contact@societe.com',
-            'total'          => $transfert->total,
-            'montant_du'     => $transfert->total,
+            'transfert_id'    => $transfert->id,
+            'type'            => 'transfert',
+            'statut'          => 'brouillon',
+            'envoye'          => false,
+            'nom_societe'     => 'FELLO',
+            'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
+            'phone_societe'   => 'Numéro de téléphone de la société',
+            'email_societe'   => 'contact@societe.com',
+            'total'           => $transfert->total,   // GNF entier
+            'montant_du'      => $transfert->total,   // GNF entier
         ]);
     }
 
@@ -145,9 +144,13 @@ class TransfertEnvoieController extends Controller
      */
     private function envoyerEmailConfirmation(Transfert $transfert): void
     {
-        $email = $transfert->expediteur?->email; // relation user via user_id
+        $email = $transfert->expediteur?->email;
         if ($email) {
-            Mail::to($email)->send(new TransfertNotification($transfert));
+            try {
+                Mail::to($email)->send(new TransfertNotification($transfert));
+            } catch (\Throwable $e) {
+                \Log::warning('Email transfert non envoyé: '.$e->getMessage());
+            }
         }
     }
 }
