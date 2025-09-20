@@ -26,62 +26,7 @@ class AuthController extends Controller
         ], $statusCode);
     }
 
-    // Inscription
-    public function register(Request $request)
-    {
-        // Validation des données
-        $validator = Validator::make($request->all(), [
-            'civilite' => 'required|in:Mr,Mme,Mlle,Autre',  // Validation de la civilité
-            'nom' => 'required|string|max:255',              // Validation du nom
-            'prenom' => 'required|string|max:255',           // Validation du prénom
-            'phone' => 'required|string|unique:users,phone', // Téléphone unique
-            'date_naissance' => 'nullable|date',             // Date de naissance (facultatif)
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8|confirmed',
-            'role' => 'required|string|exists:roles,name',
-        ]);
-
-        // Si la validation échoue, retourner une erreur
-        if ($validator->fails()) {
-            return response()->json(['errors' => $validator->errors()], 422);
-        }
-
-        try {
-            // Création de l'utilisateur
-            $user = User::create([
-                'civilite' => $request->civilite,
-                'nom' => $request->nom,
-                'prenom' => $request->prenom,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'date_naissance' => $request->date_naissance,
-                'password' => Hash::make($request->password),
-            ]);
-
-            // Assigner un rôle par défaut, par exemple "user"
-            $user->assignRole($request->role); // Assurez-vous que ce rôle existe
-
-            // event(new Registered($user));
-
-            // Envoi de la notification de vérification de l'email
-            $user->sendEmailVerificationNotification();
-
-            // Création du token API
-            $token = $user->createToken('Personal Access Token')->plainTextToken;
-
-            return response()->json([
-                'message' => 'Utilisateur créé avec succès. Veuillez vérifier votre email pour valider votre compte.',
-                'user' => $user,
-                'token' => $token,
-            ], 201);
-        } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Une erreur est survenue lors de l\'enregistrement.',
-                'message' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
+    
     // Connexion
     public function login(Request $request)
     {
@@ -131,6 +76,22 @@ class AuthController extends Controller
             'message' => 'Déconnecté de tous les appareils.',
         ], 200);
     }
+
+    // App\Http\Controllers\AuthController.php
+public function me(Request $request)
+{
+    $user = $request->user(); // récupère l'utilisateur via Sanctum
+
+    // Cache les champs sensibles
+    $user->makeHidden(['password', 'remember_token']);
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Profil récupéré.',
+        'data' => $user
+    ], 200);
+}
+
 
     // Vérification de l'email
     public function verifyEmail(Request $request, $id, $hash)
