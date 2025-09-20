@@ -39,11 +39,13 @@
     <table>
         {{--  <tr>
             <th>Montant envoyé</th>
-            <td>{{ number_format((float)$transfert->montant_euro, 2, ',', ' ') }} {{ $devSrc }}</td>
+            <td>{{ number_format((float)$transfert->montant_envoie, 2, ',', ' ') }} {{ $devSrc }}</td>
         </tr>  --}}
          <tr>
             <th>Total débité</th>
-            <td><strong>{{ number_format((float)($transfert->total ?? ($transfert->total_eur + ($transfert->frais ?? 0))), 2, ',', ' ') }} {{ $devSrc }}</strong></td>
+             {{--  <td><strong>{{ number_format((float)($transfert->total ?? ($transfert->total_ttc + ($transfert->frais ?? 0))), 2, ',', ' ') }} {{ $devSrc }}</strong></td>  --}}
+
+            <td><strong>{{ number_format((float)$transfert->total_ttc, 2, ',', ' ') }} {{ $devSrc }}</strong></td>
         </tr>
 {{--          
         <tr>

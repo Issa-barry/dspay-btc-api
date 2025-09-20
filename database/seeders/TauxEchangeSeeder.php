@@ -15,4 +15,6 @@ class TauxEchangeSeeder extends Seeder
             ['taux' => 10700]
         );
     }
+
+    // php artisan db:seed --class=TauxEchangeSeeder
 }

@@ -38,7 +38,7 @@ class TransfertEnvoieController extends Controller
             $taux = (int) $tauxEchange->taux;
 
             // 2) Montant saisi en €
-            $montantEuro = (float) $request->montant_euro;
+            $montantEuro = (float) $request->montant_envoie;
 
             // 3) Frais en € (jamais convertis)
             $fraisEuro  = $this->calculerFraisEuro($montantEuro);
@@ -56,9 +56,9 @@ class TransfertEnvoieController extends Controller
                 'devise_cible_id'  => 2, // GNF
                 'taux_echange_id'  => $tauxEchange->id,
                 'taux_applique'    => $taux,        // ENTIER
-                'montant_euro'     => $montantEuro, // DECIMAL
-                'frais_eur'        => $fraisEuro,   // DECIMAL
-                'total_eur'        => $totalEuro,   // DECIMAL
+                'montant_envoie'     => $montantEuro, // DECIMAL
+                'frais'        => $fraisEuro,   // DECIMAL
+                'total_ttc'        => $totalEuro,   // DECIMAL
                 'montant_gnf'      => $montantGnf,  // ENTIER
                 'total_gnf'        => $totalGnf,    // ENTIER
                 'statut'           => 'envoyé',
@@ -86,7 +86,7 @@ class TransfertEnvoieController extends Controller
         return Validator::make($request->all(), [
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
-            'montant_euro'    => ['required', 'numeric', 'min:1', 'max:1000'],
+            'montant_envoie'    => ['required', 'numeric', 'min:1', 'max:1000'],
         ]);
     }
 
@@ -121,8 +121,8 @@ class TransfertEnvoieController extends Controller
             'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
             'phone_societe'   => 'Numéro de téléphone de la société',
             'email_societe'   => 'contact@societe.com',
-            'total'           => $t->total_eur,  // facture en €
-            'montant_du'      => $t->total_eur,  // facture en €
+            'total'           => $t->total_ttc,  // facture en €
+            'montant_du'      => $t->total_ttc,  // facture en €
         ]);
     }
 

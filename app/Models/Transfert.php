@@ -15,20 +15,20 @@ class Transfert extends Model
         'devise_source_id',
         'devise_cible_id',
         'taux_echange_id',
-        'taux_applique',   // ENTIER (ex: 10700)
-        'montant_euro',    // DECIMAL(15,2)
-        'frais_eur',       // DECIMAL(10,2) — frais en €
-        'total_eur',       // DECIMAL(12,2) — montant_euro + frais_eur
-        'montant_gnf',     // ENTIER — montant reçu
-        'total_gnf',       // ENTIER — = montant_gnf (pas de frais en GNF)
+        'taux_applique',      // ENTIER (ex: 10700)
+        'montant_envoie',    // DECIMAL(15,2)
+        'frais',            // DECIMAL(10,2) — frais en €
+        'total_ttc',       // DECIMAL(12,2) — montant_envoie + frais
+        'montant_gnf',    // ENTIER — montant reçu
+        'total_gnf',     // ENTIER — = montant_gnf (pas de frais en GNF)
         'code',
         'statut',
     ];
 
     protected $casts = [
-        'montant_euro'  => 'decimal:2',
-        'frais_eur'     => 'decimal:2',
-        'total_eur'     => 'decimal:2',
+        'montant_envoie'  => 'decimal:2',
+        'frais'     => 'decimal:2',
+        'total_ttc'     => 'decimal:2',
         'taux_applique' => 'integer',
         'montant_gnf'   => 'integer',
         'total_gnf'     => 'integer',
@@ -62,7 +62,7 @@ class Transfert extends Model
     /** Conversion EUR->GNF avec taux entier, arrondi entier. */
     public function calculerMontantConverti(): int
     {
-        return (int) round(((float) $this->montant_euro) * ((int) $this->taux_applique), 0, PHP_ROUND_HALF_UP);
+        return (int) round(((float) $this->montant_envoie) * ((int) $this->taux_applique), 0, PHP_ROUND_HALF_UP);
     }
 
     public static function generateUniqueCode(): string
