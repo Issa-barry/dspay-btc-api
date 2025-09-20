@@ -226,8 +226,10 @@ Route::delete('/transferts/deleteByCode/{id}', [TransfertDeleteController::class
 
 Route::get('/transferts/statistiques/agence/{agenceId}', [TransfertStatistiqueController::class, 'getSommeTransfertsParAgence']);
 Route::get('/transferts/statistiques/globales', [TransfertStatistiqueController::class, 'getStatistiquesGlobales']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/transferts/envoie', [TransfertEnvoieController::class, 'store']);
+    Route::get('/transferts/by-user-auth', [TransfertShowController::class, 'byUser']);
 });
 
 
