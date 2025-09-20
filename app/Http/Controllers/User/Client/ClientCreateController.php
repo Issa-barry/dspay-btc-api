@@ -22,12 +22,18 @@ class ClientCreateController extends Controller
     public function store(Request $request)
     {
         try {
-            // 1) Validation
+            // 1) Validation (nom & prenom requis désormais)
             $validated = $request->validate([
-                'email'    => 'required|email|unique:users,email',
-                'phone'    => 'required|string|unique:users,phone',
-                'password' => 'required|string|min:8|confirmed',
+                'nom'       => 'required|string|max:100',
+                'prenom'    => 'required|string|max:100',
+                'email'     => 'required|email|unique:users,email',
+                'phone'     => 'required|string|unique:users,phone',
+                'password'  => 'required|string|min:8|confirmed',
             ]);
+
+            // Normalisation simple
+            $validated['nom']    = trim($validated['nom']);
+            $validated['prenom'] = trim($validated['prenom']);
 
             // 2) Transaction: user + rôle
             $user = DB::transaction(function () use ($validated) {
@@ -37,12 +43,14 @@ class ClientCreateController extends Controller
                     throw new Exception("Le rôle 'Client' est introuvable. Crée-le d'abord.");
                 }
 
-                // b) création user (nom/prenom/adresse_id facultatifs dans ton schéma)
+                // b) création user (avec nom & prenom)
                 $user = User::create([
+                    'nom'      => $validated['nom'],
+                    'prenom'   => $validated['prenom'],
                     'email'    => $validated['email'],
                     'phone'    => $validated['phone'],
                     'password' => Hash::make($validated['password']),
-                    'role_id'  => $role->id, // obligatoire côté BDD
+                    'role_id'  => $role->id,
                 ]);
 
                 // c) Spatie
@@ -59,7 +67,7 @@ class ClientCreateController extends Controller
                 return $this->responseJson(
                     true,
                     "Compte client créé, mais l'email de vérification n'a pas pu être envoyé.",
-                    $user->only(['id','email','phone']),
+                    $user->only(['id','nom','prenom','email','phone']),
                     201
                 );
             }
@@ -67,7 +75,7 @@ class ClientCreateController extends Controller
             return $this->responseJson(
                 true,
                 'Compte client créé avec succès. Veuillez vérifier votre email.',
-                $user->only(['id','email','phone']),
+                $user->only(['id','nom','prenom','email','phone']),
                 201
             );
 
