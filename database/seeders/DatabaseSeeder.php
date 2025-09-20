@@ -20,7 +20,10 @@ class DatabaseSeeder extends Seeder
         //     'email' => 'test@example.com',
         // ]);
         $this->call([
-            RoleSeeder::class,
+            RoleSeeder::class,        // rôles d'abord
+            DeviseSeeder::class,      // puis devises
+            FraisSeeder::class,       // barème de frais
+            TauxEchangeSeeder::class, // nécessite les devises
         ]);
     }
 }

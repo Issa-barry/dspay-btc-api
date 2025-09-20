@@ -50,7 +50,7 @@ use App\Http\Controllers\Taux\TauxUpdateController;
 use App\Http\Controllers\User\UserAffecterAgenceController;
 use App\Http\Controllers\User\UserDesacfecterAgenceController;
 
-use App\Http\Controllers\Transfert\TransfertStatistiqueController;
+use App\Http\Controllers\Transfert\TransfertStatistiqueController; 
 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
