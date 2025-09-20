@@ -229,7 +229,7 @@ Route::get('/transferts/statistiques/globales', [TransfertStatistiqueController:
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/transferts/envoie', [TransfertEnvoieController::class, 'store']);
-    Route::get('/transferts/by-user-auth', [TransfertShowController::class, 'byUser']);
+    Route::get('/transferts/by-user', [TransfertShowController::class, 'byUser']);
 });
 
 
