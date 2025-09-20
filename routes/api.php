@@ -65,6 +65,7 @@ Route::get('/verify-email/{id}/{hash}', [AuthController::class, 'verifyEmail'])-
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/check-token-header', [AuthController::class, 'checkTokenInHeader']);
+    Route::get('users/me', [AuthController::class, 'me']);
 });
 
 // Route::middleware('auth:sanctum')->group(function () {
@@ -101,8 +102,9 @@ Route::get('/all', [ShowUserController::class, 'index']);
 Route::get('/getById/{id}', [ShowUserController::class, 'getById']);
 Route::put('/updateById/{id}', [updateUserController::class, 'updateById']);
 Route::delete('/delateById/{id}', [DeleteUserController::class, 'delateById']);
-});
+ });
 
+// Route::middleware('auth:sanctum')->get('/users/me', [AuthController::class, 'me']);
 
 
 use App\Http\Controllers\User\UserStatutController;
