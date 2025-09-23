@@ -14,28 +14,28 @@ class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasApiTokens, HasRoles;
-    
+
 
     /** 
      * The attributes that are mass assignable.
      *
      * @var array<int, string>
      */
+    // App/Models/User.php
     protected $fillable = [
         'email',
         'password',
         'reference',
         'civilite',
-        'nom', 
+        'nom',
         'prenom',
         'phone',
         'date_naissance',
-        'adresse_id',
-        'role_id', 
-        // 'agence_id',
+        'role_id',
     ];
+ 
 
-       // Expose le nom complet en lecture seule (virtuel) pour compatibilité
+    // Expose le nom complet en lecture seule (virtuel) pour compatibilité
     protected $appends = ['nom_complet'];
 
     public function getNomCompletAttribute(): string
@@ -47,11 +47,17 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return $this->roles()->first(); // Retourne le premier rôle associé
     }
-    
+
     public function adresse()
     {
-        return $this->belongsTo(Adresse::class);
+        return $this->hasOne(Adresse::class);
     }
+
+
+    // public function adresse()
+    // {
+    //     return $this->belongsTo(Adresse::class);
+    // }
 
     // public function agence()
     // {
@@ -63,7 +69,7 @@ class User extends Authenticatable implements MustVerifyEmail
     // {
     //     return $this->roles->pluck('name')->first(); // Return the first role name as string
     // }
-   
+
     /**
      * The attributes that should be hidden for serialization.
      *
@@ -86,7 +92,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'password' => 'hashed',
         ];
     }
-   //Genereation de referecen
+    //Genereation de referecen
     protected static function booted()
     {
         static::creating(function ($user) {
@@ -97,7 +103,7 @@ class User extends Authenticatable implements MustVerifyEmail
             // Supprime l'adresse associée si elle existe
             if ($user->adresse) {
                 $user->adresse->delete();
-            } 
+            }
         });
     }
 
@@ -110,7 +116,7 @@ class User extends Authenticatable implements MustVerifyEmail
         return $reference;
     }
 
-     /** 
+    /** 
      * Get the email verification URL for the given user.
      *
      * @return string

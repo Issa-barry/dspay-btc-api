@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User\Client;
 
 use App\Http\Controllers\Controller;
+use App\Models\Adresse;
 use App\Models\Role;
 use App\Models\User;
 use App\Notifications\CustomVerifyEmail;
@@ -22,60 +23,89 @@ class ClientCreateController extends Controller
     public function store(Request $request)
     {
         try {
-            // 1) Validation (nom & prenom requis désormais)
+            // 1) Validation
             $validated = $request->validate([
-                'nom'       => 'required|string|max:100',
-                'prenom'    => 'required|string|max:100',
-                'email'     => 'required|email|unique:users,email',
-                'phone'     => 'required|string|unique:users,phone',
-                'password'  => 'required|string|min:8|confirmed',
+                'civilite'                     => 'nullable|in:Mr,Mme,Mlle,Autre',
+                'nom'                          => 'required|string|max:100',
+                'prenom'                       => 'required|string|max:150',
+                'email'                        => 'required|email|unique:users,email',
+                'phone'                        => 'required|string|unique:users,phone',
+                'date_naissance'               => 'nullable|date',
+                'password'                     => 'required|string|min:8|confirmed',
+
+                'adresse'                      => ['nullable','array'],
+                'adresse.pays'                 => 'required_with:adresse|string|max:255',
+                'adresse.code'                 => 'nullable|string|max:10',
+                'adresse.adresse'              => 'nullable|string|max:255',
+                'adresse.complement_adresse'   => 'nullable|string|max:255',
+                'adresse.ville'                => 'nullable|string|max:255',
+                'adresse.quartier'             => 'nullable|string|max:255',
+                'adresse.code_postal'          => 'nullable|string|max:20',
+                'adresse.region'               => 'nullable|string|max:255',
             ]);
 
-            // Normalisation simple
+            // Normalisations
             $validated['nom']    = trim($validated['nom']);
             $validated['prenom'] = trim($validated['prenom']);
+            $validated['email']  = strtolower(trim($validated['email']));
 
-            // 2) Transaction: user + rôle
-            $user = DB::transaction(function () use ($validated) {
-                // a) rôle "Client" obligatoire
+            // 2) Transaction: user -> adresse -> rôle
+            [$user, $adresse] = DB::transaction(function () use ($validated) {
+                // a) rôle
                 $role = Role::where('name', 'Client')->first();
                 if (!$role) {
-                    throw new Exception("Le rôle 'Client' est introuvable. Crée-le d'abord.");
+                    throw new Exception("Le rôle Client est introuvable. Veuillez le créer d'abord.");
                 }
 
-                // b) création user (avec nom & prenom)
+                // b) user
                 $user = User::create([
-                    'nom'      => $validated['nom'],
-                    'prenom'   => $validated['prenom'],
-                    'email'    => $validated['email'],
-                    'phone'    => $validated['phone'],
-                    'password' => Hash::make($validated['password']),
-                    'role_id'  => $role->id,
+                    'civilite'       => $validated['civilite'] ?? 'Autre',
+                    'nom'            => $validated['nom'],
+                    'prenom'         => $validated['prenom'],
+                    'email'          => $validated['email'],
+                    'phone'          => $validated['phone'],
+                    'password'       => Hash::make($validated['password']),
+                    'role_id'        => $role->id,
                 ]);
 
-                // c) Spatie
                 $user->assignRole('Client');
 
-                return $user;
+                // c) adresse (si absente, on met juste un pays par défaut)
+                $addr = $validated['adresse'] ?? ['pays' => 'GUINÉE'];
+                $pays = isset($addr['pays']) ? mb_strtoupper(trim($addr['pays'])) : 'GUINÉE';
+
+                $adresse = Adresse::create([
+                    'user_id'            => $user->id,        // << IMPORTANT
+                    'pays'               => $pays,
+                    'code'               => $addr['code'] ?? null,
+                    'adresse'            => $addr['adresse'] ?? null,
+                    'complement_adresse' => $addr['complement_adresse'] ?? null,
+                    'ville'              => $addr['ville'] ?? null,
+                    'quartier'           => $addr['quartier'] ?? null,
+                    'code_postal'        => $addr['code_postal'] ?? null,
+                    'region'             => $addr['region'] ?? null,
+                ]);
+
+                return [$user, $adresse];
             });
 
             // 3) Email de vérification (non bloquant)
             try {
                 $user->notify(new CustomVerifyEmail());
             } catch (Exception $e) {
-                Log::error("Email vérif non envoyé (client {$user->id}) : ".$e->getMessage());
+                Log::error("Email vérif non envoyé (user {$user->id}) : ".$e->getMessage());
                 return $this->responseJson(
                     true,
-                    "Compte client créé, mais l'email de vérification n'a pas pu être envoyé.",
-                    $user->only(['id','nom','prenom','email','phone']),
+                    "Client créé, mais l'email de vérification n'a pas pu être envoyé.",
+                    $user->load(['adresse','roles']),
                     201
                 );
             }
 
             return $this->responseJson(
                 true,
-                'Compte client créé avec succès. Veuillez vérifier votre email.',
-                $user->only(['id','nom','prenom','email','phone']),
+                'Client créé avec succès. Veuillez vérifier votre email.',
+                $user->load(['adresse','roles']),
                 201
             );
 
@@ -84,7 +114,7 @@ class ClientCreateController extends Controller
 
         } catch (QueryException $e) {
             Log::error('Erreur SQL création client : ' . $e->getMessage());
-            return $this->responseJson(false, $e->errorInfo[2] ?? 'Erreur SQL', null, 500);
+            return $this->responseJson(false, $e->errorInfo[2] ?? 'Erreur de base de données.', null, 500);
 
         } catch (Exception $e) {
             Log::error('Erreur générale création client : ' . $e->getMessage());

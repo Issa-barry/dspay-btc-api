@@ -24,7 +24,7 @@ return new class extends Migration
             $table->enum('civilite', ['Mr', 'Mme', 'Mlle', 'Autre'])->default('Autre');
             $table->string('password'); 
             $table->foreignId('role_id')->constrained('roles')->onDelete('restrict')->default(1);
-             $table->foreignId('adresse_id')->nullable()->constrained('adresses')->nullOnDelete();
+            //  $table->foreignId('adresse_id')->nullable()->constrained('adresses')->nullOnDelete();
 
     
             // Ajout de la clé étrangère vers la table agences
