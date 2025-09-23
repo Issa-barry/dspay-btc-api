@@ -10,6 +10,7 @@ class Adresse extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'pays',
         'adresse',
         'complement_adresse',
@@ -17,8 +18,20 @@ class Adresse extends Model
         'code_postal',
         'quartier',    
         'region', 
+        'code',
     ];
 
+    /**
+     * Relation : une adresse appartient à un utilisateur.
+     */
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    /**
+     * Relation : une adresse peut être liée à plusieurs agences.
+     */
     public function agences()
     {
         return $this->hasMany(Agence::class);
