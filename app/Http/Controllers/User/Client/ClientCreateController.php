@@ -33,7 +33,7 @@ class ClientCreateController extends Controller
                 'date_naissance'               => 'nullable|date',
                 'password'                     => 'required|string|min:8|confirmed',
 
-                'adresse'                      => ['nullable','array'],
+                'adresse'                      => 'nullable','array',
                 'adresse.pays'                 => 'required_with:adresse|string|max:255',
                 'adresse.code'                 => 'nullable|string|max:10',
                 'adresse.adresse'              => 'nullable|string|max:255',
