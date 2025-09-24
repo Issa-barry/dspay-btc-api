@@ -8,6 +8,9 @@ use App\Models\Role;
 use App\Models\User;
 use App\Notifications\CustomVerifyEmail;
 use App\Traits\JsonResponseTrait;
+use Brick\PhoneNumber\PhoneNumber;
+use Brick\PhoneNumber\PhoneNumberFormat;
+use Brick\PhoneNumber\PhoneNumberParseException;
 use Exception;
 use Hash;
 use Illuminate\Database\QueryException;
@@ -33,7 +36,7 @@ class ClientCreateController extends Controller
                 'date_naissance'               => 'nullable|date',
                 'password'                     => 'required|string|min:8|confirmed',
 
-                'adresse'                      => ['nullable','array'],
+                'adresse'                      => 'nullable','array',
                 'adresse.pays'                 => 'required_with:adresse|string|max:255',
                 'adresse.code'                 => 'nullable|string|max:10',
                 'adresse.adresse'              => 'nullable|string|max:255',
@@ -48,6 +51,19 @@ class ClientCreateController extends Controller
             $validated['nom']    = trim($validated['nom']);
             $validated['prenom'] = trim($validated['prenom']);
             $validated['email']  = strtolower(trim($validated['email']));
+
+              // Pays pour le parsing du téléphone (ISO2), défaut FR
+            $country = strtoupper($validated['adresse']['code'] ?? 'FR');
+
+            // 3) Normalisation téléphone en E.164 (source of truth)
+            try {
+                $validated['phone'] = PhoneNumber::parse($validated['phone'], $country)
+                    ->format(PhoneNumberFormat::E164); // ex: +33612345678
+            } catch (PhoneNumberParseException $e) {
+                return $this->responseJson(false, 'Numéro de téléphone invalide pour le pays sélectionné.', [
+                    'phone' => ["Numéro invalide pour le pays {$country}."]
+                ], 422);
+            }
 
             // 2) Transaction: user -> adresse -> rôle
             [$user, $adresse] = DB::transaction(function () use ($validated) {
