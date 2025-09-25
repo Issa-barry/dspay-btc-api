@@ -55,13 +55,14 @@ class TransfertEnvoieController extends Controller
                 'devise_source_id' => 1, // EUR
                 'devise_cible_id'  => 2, // GNF
                 'taux_echange_id'  => $tauxEchange->id,
-                'taux_applique'    => $taux,        // ENTIER
-                'montant_envoie'     => $montantEuro, // DECIMAL
-                'frais'        => $fraisEuro,   // DECIMAL
-                'total_ttc'        => $totalEuro,   // DECIMAL
-                'montant_gnf'      => $montantGnf,  // ENTIER
-                'total_gnf'        => $totalGnf,    // ENTIER
+                'taux_applique'    => $taux,          // ENTIER
+                'montant_envoie'   => $montantEuro,   // DECIMAL
+                'frais'            => $fraisEuro,     // DECIMAL
+                'total_ttc'        => $totalEuro,     // DECIMAL
+                'montant_gnf'      => $montantGnf,    // ENTIER
+                'total_gnf'        => $totalGnf,      // ENTIER
                 'statut'           => 'envoyé',
+                'mode_reception'       => $request->input('mode_reception', Transfert::MODE_RETRAIT_CASH),
                 'code'             => Transfert::generateUniqueCode(),
             ]);
 
@@ -86,7 +87,8 @@ class TransfertEnvoieController extends Controller
         return Validator::make($request->all(), [
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
-            'montant_envoie'    => ['required', 'numeric', 'min:1', 'max:1000'],
+            'montant_envoie'  => ['required', 'numeric', 'min:1', 'max:1000'],
+            'mode_reception'      => ['nullable', 'in:'.implode(',', Transfert::MODES_RECEPTION)],
         ]);
     }
 
