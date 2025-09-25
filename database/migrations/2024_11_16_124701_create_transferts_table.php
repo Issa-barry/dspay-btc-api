@@ -35,6 +35,9 @@ return new class extends Migration
             $table->string('code', 16)->unique();
             $table->enum('statut', ['envoyé', 'retiré', 'annulé', 'bloqué'])->default('envoyé');
 
+            // Ajoute le mode d’envoi avec une valeur par défaut
+            $table->enum('mode_reception', ['orange_money', 'ewallet', 'retrait_cash'])->default('retrait_cash');
+
             $table->timestamps();
         });
     }

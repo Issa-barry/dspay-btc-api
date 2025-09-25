@@ -32,11 +32,11 @@ class ClientCreateController extends Controller
                 'nom'                          => 'required|string|max:100',
                 'prenom'                       => 'required|string|max:150',
                 'email'                        => 'required|email|unique:users,email',
-                'phone'                        => 'required|string|unique:users,phone',
+                'phone'                        => 'required|string', // unicité testée après normalisation E.164
                 'date_naissance'               => 'nullable|date',
                 'password'                     => 'required|string|min:8|confirmed',
 
-                'adresse'                      => 'nullable','array',
+                'adresse'                      => ['nullable','array'],
                 'adresse.pays'                 => 'required_with:adresse|string|max:255',
                 'adresse.code'                 => 'nullable|string|max:10',
                 'adresse.adresse'              => 'nullable|string|max:255',
@@ -47,12 +47,12 @@ class ClientCreateController extends Controller
                 'adresse.region'               => 'nullable|string|max:255',
             ]);
 
-            // Normalisations
+            // 2) Normalisations
             $validated['nom']    = trim($validated['nom']);
             $validated['prenom'] = trim($validated['prenom']);
             $validated['email']  = strtolower(trim($validated['email']));
 
-              // Pays pour le parsing du téléphone (ISO2), défaut FR
+            // Pays pour le parsing du téléphone (ISO2), défaut FR
             $country = strtoupper($validated['adresse']['code'] ?? 'FR');
 
             // 3) Normalisation téléphone en E.164 (source of truth)
@@ -65,7 +65,14 @@ class ClientCreateController extends Controller
                 ], 422);
             }
 
-            // 2) Transaction: user -> adresse -> rôle
+            // 3.b) Unicité après normalisation
+            if (User::where('phone', $validated['phone'])->exists()) {
+                return $this->responseJson(false, 'Le numéro de téléphone est déjà utilisé.', [
+                    'phone' => ['Ce numéro est déjà pris.']
+                ], 422);
+            }
+
+            // 4) Transaction: user -> adresse -> rôle
             [$user, $adresse] = DB::transaction(function () use ($validated) {
                 // a) rôle
                 $role = Role::where('name', 'Client')->first();
@@ -79,7 +86,7 @@ class ClientCreateController extends Controller
                     'nom'            => $validated['nom'],
                     'prenom'         => $validated['prenom'],
                     'email'          => $validated['email'],
-                    'phone'          => $validated['phone'],
+                    'phone'          => $validated['phone'], // déjà E.164
                     'password'       => Hash::make($validated['password']),
                     'role_id'        => $role->id,
                 ]);
@@ -105,7 +112,7 @@ class ClientCreateController extends Controller
                 return [$user, $adresse];
             });
 
-            // 3) Email de vérification (non bloquant)
+            // 5) Email de vérification (non bloquant)
             try {
                 $user->notify(new CustomVerifyEmail());
             } catch (Exception $e) {
@@ -118,6 +125,7 @@ class ClientCreateController extends Controller
                 );
             }
 
+            // 6) OK
             return $this->responseJson(
                 true,
                 'Client créé avec succès. Veuillez vérifier votre email.',
