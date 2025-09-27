@@ -115,11 +115,11 @@
                                 </div>
 
                                 <div class="pt-3 sm:pt-5">
-                                    <h2 class="text-xl font-semibold text-black dark:text-white">TRANSFERT `D'ARGENT`</h2>
+                                    <h2 class="text-xl font-semibold text-black dark:text-white">TRANSFERT 'D\'ARGENT'</h2>
 
                                     <p class="mt-4 text-sm/relaxed">
-                                        Laracasts offers thousands of video tutorials on Laravel, PHP, and JavaScript development. Check them out, see for yourself, and massively level up your development skills in the process.
-                                    </p>
+Avec DSPAY, envoyez de l’argent à vos proches en Guinée en toute simplicité et sécurité.
+Des transferts rapides, fiables et adaptés à vos besoins.                                    </p>
                                 </div>
 
                                 <svg class="size-6 shrink-0 self-center stroke-[#FF2D20]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12h15m0 0l-6.75-6.75M19.5 12l-6.75 6.75"/></svg>
