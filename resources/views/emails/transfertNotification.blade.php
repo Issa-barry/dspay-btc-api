@@ -1,87 +1,134 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Détails de votre transfert</title>
-    <style>
-        body { font-family: Arial, Helvetica, sans-serif; line-height: 1.6; background:#f8f9fa; color:#343a40; padding:20px; }
-        h1 { color:#6366F1; margin-bottom: 6px; }
-        .logo_name { color:#6366F1; font-weight:900; }
-        table { width:100%; border-collapse:collapse; margin-top:20px; background:#fff; }
-        table, th, td { border:1px solid #dee2e6; }
-        th, td { padding:10px; text-align:left; }
-        th { background:#f1f1f1; width: 35%; }
-        p { margin:10px 0; }
-        .footer { margin-top:30px; font-size:12px; color:#6c757d; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Détails de votre transfert</title>
 </head>
-<body>
-    <h1>Détails du transfert</h1>
-    <p>
-        Bonjour
-        {{ optional($transfert->user)->nom_complet
-            ?? optional($transfert->user)->name
-            ?? optional($transfert->user)->email
-            ?? '' }} ,
-    </p>
-
-    <p>Voici les détails de votre transfert :</p>
-
-    @php
-        $devSrc = optional($transfert->deviseSource)->tag ?? 'EUR';
-        $devDst = optional($transfert->deviseCible)->tag ?? 'GNF';
-        $benef  = optional($transfert->beneficiaire);
-        $benefNomComplet = trim(($benef->prenom ?? '').' '.($benef->nom ?? '')) ?: ($benef->nom_complet ?? '—');
-        $taux  = optional($transfert->tauxEchange)->taux;
-    @endphp
-
-    <table>
-        {{--  <tr>
-            <th>Montant envoyé</th>
-            <td>{{ number_format((float)$transfert->montant_envoie, 2, ',', ' ') }} {{ $devSrc }}</td>
-        </tr>  --}}
-         <tr>
-            <th>Total débité</th>
-             {{--  <td><strong>{{ number_format((float)($transfert->total ?? ($transfert->total_ttc + ($transfert->frais ?? 0))), 2, ',', ' ') }} {{ $devSrc }}</strong></td>  --}}
-
-            <td><strong>{{ number_format((float)$transfert->total_ttc, 2, ',', ' ') }} {{ $devSrc }}</strong></td>
-        </tr>
-{{--          
-        <tr>
-            <th>Frais</th>
-            <td>{{ number_format((float)($transfert->frais ?? 0), 2, ',', ' ') }} {{ $devSrc }}</td>
-        </tr>  --}}
-        <tr>
-            <th>Bénéficiaire</th>
-            <td>
-                {{ $benefNomComplet }}<br>
-                {{ $benef->phone ?? '—' }}
+<body style="margin:0;padding:0;background:#f6f7fb;color:#1f2937;font-family:Arial,Helvetica,sans-serif;line-height:1.5;">
+  <!-- Wrapper -->
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#f6f7fb;">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <!-- Container -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="620" style="max-width:620px;background:transparent;">
+          <!-- Brand -->
+          <tr>
+            <td align="center" style="font-weight:900;font-size:24px;letter-spacing:.2px;color:#16A34A;padding:8px 0 16px 0;">
+              DSPAY
             </td>
-        </tr>
-        <tr>
-            <th>Montant à récupérer</th>
-            <td>{{ number_format((float)$transfert->montant_gnf, 0, ',', ' ') }} {{ $devDst }}</td>
-        </tr>
-       
-        <tr>
-            <th>Code de retrait</th>
-            <td>{{ $transfert->code }}</td>
-        </tr>
-        <tr>
-            <th>Date d’envoi</th>
-            <td>{{ optional($transfert->created_at)->format('d/m/Y H:i') }}</td>
-        </tr>
-    </table>
+          </tr>
 
-    <p>Merci d’utiliser notre service de transfert.</p>
-    <p>Cordialement,</p>
-    <p>L’équipe <span class="logo_name">DSPAY</span></p>
+          <!-- Title -->
+          <tr>
+            <td align="center" style="font-size:24px;line-height:1.25;color:#1f2937;padding:0 12px 8px 12px;">
+              Détails du transfert
+            </td>
+          </tr>
 
-    <p class="footer">
-        Pour toute question, contactez notre support client :<br>
-        Téléphone : +33 7 58 85 50 39<br>
-        Email : <a href="mailto:contact@dspay.com">contact@dspay.com</a>
-    </p>
+          <!-- Lead -->
+          <tr>
+            <td align="center" style="padding:0 12px 16px 12px;color:#6b7280;">
+              Bonjour
+              {{ optional($transfert->user)->nom_complet
+                  ?? optional($transfert->user)->name
+                  ?? optional($transfert->user)->email
+                  ?? '' }} ,
+              voici le récapitulatif de votre opération.
+            </td>
+          </tr>
+
+          @php
+            $devSrc = optional($transfert->deviseSource)->tag ?? 'EUR';
+            $devDst = optional($transfert->deviseCible)->tag ?? 'GNF';
+            $benef  = optional($transfert->beneficiaire);
+            $benefNomComplet = trim(($benef->prenom ?? '').' '.($benef->nom ?? '')) ?: ($benef->nom_complet ?? '—');
+          @endphp
+
+          <!-- Ticket card -->
+          <tr>
+            <td style="padding:0 0 6px 0;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:16px;">
+                <!-- Header -->
+                <tr>
+                  <td colspan="2" style="background:#16A34A;color:#ffffff;font-weight:700;font-size:16px;padding:16px 20px;border-radius:16px 16px 0 0;">
+                    Reçu de transfert
+                  </td>
+                </tr>
+
+                <!-- Total débité -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Total débité</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;">
+                    {{ number_format((float)$transfert->total_ttc, 2, ',', ' ') }} {{ $devSrc }}
+                  </td>
+                </tr>
+
+                <!-- Bénéficiaire -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Bénéficiaire</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#1f2937;">
+                    {{ $benefNomComplet }}<br>
+                    {{ $benef->phone ?? '—' }}
+                  </td>
+                </tr>
+
+                <!-- Montant à récupérer -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Montant à récupérer</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;">
+                    {{ number_format((float)$transfert->montant_gnf, 0, ',', ' ') }} {{ $devDst }}
+                  </td>
+                </tr>
+
+                <!-- Code de retrait -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Code de retrait</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#0E7A3E;">
+                    <span style="display:inline-block;background:#ECFDF5;border:1px dashed #16A34A;color:#0E7A3E;padding:6px 10px;border-radius:10px;font-weight:700;letter-spacing:.5px;">
+                      {{ $transfert->code }}
+                    </span>
+                  </td>
+                </tr>
+
+                <!-- Date 'd\'envoi' -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Date d’envoi</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#1f2937;">
+                    {{ optional($transfert->created_at)->format('d/m/Y H:i') }}
+                  </td>
+                </tr>
+
+                <!-- CTA -->
+                <tr>
+                  <td colspan="2" align="center" style="padding:20px 20px 22px 20px;border-top:1px dashed #e5e7eb;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
+                      <tr>
+                        <td bgcolor="#16A34A" style="border-radius:999px;">
+                          <a href="#"
+                             style="display:inline-block;padding:12px 22px;border-radius:999px;background:#16A34A;color:#ffffff;font-weight:700;text-decoration:none;">
+                            Suivre mon transfert
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="font-size:12px;color:#6b7280;padding:18px 12px 0 12px;">
+              Besoin d’aide ? +33 7 58 85 50 39 ·
+              <a href="mailto:contact@dspay.com" style="color:#16A34A;text-decoration:none;">contact@dspay.com</a>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
