@@ -84,9 +84,10 @@
                 <tr>
                   <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Code de retrait</td>
                   <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#0E7A3E;">
-                    <span style="display:inline-block;background:#ECFDF5;border:1px dashed #16A34A;color:#0E7A3E;padding:6px 10px;border-radius:10px;font-weight:700;letter-spacing:.5px;">
-                      {{ $transfert->code }}
-                    </span>
+                 <span style="display:inline-block;background:#ECFDF5;border:1px dashed #16A34A;color:#0E7A3E;padding:6px 14px;border-radius:10px;font-weight:700;letter-spacing:.5px;white-space:nowrap;">
+                {{ $transfert->code }}
+              </span>
+
                   </td>
                 </tr>
 
