@@ -48,22 +48,22 @@ class TransfertEnvoieController extends Controller
             $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
             $totalGnf   = $montantGnf; // pas de frais en GNF
 
-            // 5) Persistance
+            // 5) Persistance — le modèle génère le code (DSP…)
             $transfert = Transfert::create([
                 'user_id'          => $userId,
                 'beneficiaire_id'  => (int) $request->beneficiaire_id,
                 'devise_source_id' => 1, // EUR
                 'devise_cible_id'  => 2, // GNF
                 'taux_echange_id'  => $tauxEchange->id,
-                'taux_applique'    => $taux,          // ENTIER
-                'montant_envoie'   => $montantEuro,   // DECIMAL
-                'frais'            => $fraisEuro,     // DECIMAL
-                'total_ttc'        => $totalEuro,     // DECIMAL
-                'montant_gnf'      => $montantGnf,    // ENTIER
-                'total_gnf'        => $totalGnf,      // ENTIER
-                'statut'           => 'envoyé',
-                'mode_reception'       => $request->input('mode_reception', Transfert::MODE_RETRAIT_CASH),
-                'code'             => Transfert::generateUniqueCode(),
+                'taux_applique'    => $taux,        // ENTIER
+                'montant_envoie'   => $montantEuro, // DECIMAL
+                'frais'            => $fraisEuro,   // DECIMAL
+                'total_ttc'        => $totalEuro,   // DECIMAL
+                'montant_gnf'      => $montantGnf,  // ENTIER
+                'total_gnf'        => $totalGnf,    // ENTIER
+                'statut'           => Transfert::STATUT_ENVOYE,
+                'mode_reception'   => $request->input('mode_reception', Transfert::MODE_RETRAIT_CASH),
+                // 'code' => Transfert::generateUniqueCode(), // ← inutile, le modèle s'en charge
             ]);
 
             // 6) Facture (en €)
@@ -88,11 +88,11 @@ class TransfertEnvoieController extends Controller
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
             'montant_envoie'  => ['required', 'numeric', 'min:1', 'max:1000'],
-            'mode_reception'      => ['nullable', 'in:'.implode(',', Transfert::MODES_RECEPTION)],
+            'mode_reception'  => ['nullable', 'in:' . implode(',', Transfert::MODES_RECEPTION)],
         ]);
     }
 
-    // Frais en € — type 'pourcentage' => valeur en POURCENT (5 pour 5%), type 'fixe' => valeur en €
+    // Frais en € — type 'pourcentage' => valeur en %, type 'fixe' => valeur en €
     private function calculerFraisEuro(float $montantEuro): float
     {
         $frais = Frais::where('montant_min', '<=', $montantEuro)
@@ -123,8 +123,8 @@ class TransfertEnvoieController extends Controller
             'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
             'phone_societe'   => 'Numéro de téléphone de la société',
             'email_societe'   => 'contact@societe.com',
-            'total'           => $t->total_ttc,  // facture en €
-            'montant_du'      => $t->total_ttc,  // facture en €
+            'total'           => $t->total_ttc, // facture en €
+            'montant_du'      => $t->total_ttc, // facture en €
         ]);
     }
 
@@ -135,7 +135,7 @@ class TransfertEnvoieController extends Controller
             try {
                 Mail::to($email)->send(new TransfertNotification($transfert));
             } catch (\Throwable $e) {
-                \Log::warning('Email transfert non envoyé: '.$e->getMessage());
+                \Log::warning('Email transfert non envoyé: ' . $e->getMessage());
             }
         }
     }
