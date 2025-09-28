@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
@@ -13,6 +14,7 @@ use Illuminate\Auth\Events\Verified;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Sanctum\PersonalAccessToken;
 use Spatie\Permission\Models\Role;
+use Str;
 
 class AuthController extends Controller
 {
@@ -115,55 +117,53 @@ public function me(Request $request)
         ], 400);
     }
 
-    public function resetPassword(Request $request)
-    {
-        $messages = [
-            'email.required' => 'L\'adresse email est obligatoire.',
-            'email.email' => 'L\'adresse email n\'est pas valide.',
-            'password.required' => 'Le mot de passe est obligatoire.',
-            'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
-            'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
-        ];
+public function resetPassword(Request $request)
+{
+    $messages = [
+        'email.required' => 'L\'adresse email est obligatoire.',
+        'email.email' => 'L\'adresse email n\'est pas valide.',
+        'token.required' => 'Le jeton est manquant.',
+        'password.required' => 'Le mot de passe est obligatoire.',
+        'password.min' => 'Le mot de passe doit contenir au moins 8 caractères.',
+        'password.confirmed' => 'La confirmation du mot de passe ne correspond pas.',
+    ];
 
-        $validator = Validator::make($request->all(), [
-            'email' => 'required|email',
-            'password' => 'required|string|min:8|confirmed',
-        ], $messages);
+    $request->validate([
+        'token' => 'required',
+        'email' => 'required|email',
+        'password' => 'required|string|min:8|confirmed',
+    ], $messages);
 
-        if ($validator->fails()) {
-            $errors = $validator->errors()->toArray();
+    $status = Password::reset(
+        $request->only('email', 'password', 'password_confirmation', 'token'),
+        function ($user, $password) {
+            // ➜ préserver l’état de vérification existant
+            // $verifiedAt = $user->getOriginal('email_verified_at');
 
-            // Déplacer le message de confirmation si présent
-            if (isset($errors['password'])) {
-                foreach ($errors['password'] as $index => $message) {
-                    if (str_contains($message, 'confirmation')) {
-                        $errors['password_confirmation'][] = $message;
-                        unset($errors['password'][$index]);
-                    }
-                }
+            $user->forceFill([
+                'password'          => Hash::make($password),
+                'remember_token'    => Str::random(60),
+                // 'email_verified_at' => $verifiedAt,
+            ])->saveQuietly();
 
-                // Nettoyer si plus rien dans password
-                if (empty(array_filter($errors['password']))) {
-                    unset($errors['password']);
-                }
-            }
-
-            return $this->responseJson(false, 'Erreur de validation.', $errors, 422);
+            event(new PasswordReset($user));
         }
+    );
 
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user) {
-            return $this->responseJson(false, 'Aucun utilisateur trouvé avec cette adresse email.', null, 404);
-        }
-
-        $user->password = Hash::make($request->password);
-        $user->save();
-
-        return $this->responseJson(true, 'Mot de passe réinitialisé.', [
-            'user' => $user,
-        ]);
+    if ($status !== Password::PASSWORD_RESET) {
+        return $this->responseJson(false, __($status), null, 422);
     }
+
+    $user = User::where('email', $request->email)->first();
+
+    // ✅ BONUS : si l’email était déjà vérifié, on émet un token pour auto-login
+    $payload = ['user' => $user];
+    if ($user && $user->hasVerifiedEmail()) {
+        $payload['access_token'] = $user->createToken('access_token')->plainTextToken;
+    }
+
+    return $this->responseJson(true, 'Mot de passe réinitialisé.', $payload);
+}
 
 
     public function sendResetPasswordLink(Request $request)
