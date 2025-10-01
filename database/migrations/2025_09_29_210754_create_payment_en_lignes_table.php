@@ -13,7 +13,14 @@ return new class extends Migration
 
             // ─── Informations générales ───
             $table->string('provider')->index(); // stripe, paypal, etc.
-            $table->string('provider_payment_id')->unique();
+
+            // Compat: id générique historique (peut être cs_ OU pi_)
+            $table->string('provider_payment_id')->nullable()->index();
+
+            // Nouveaux identifiants dédiés Stripe
+            $table->string('session_id')->nullable()->index();           // cs_...
+            $table->string('payment_intent_id')->nullable()->index();    // pi_...
+
             $table->string('status')->index(); // succeeded, pending, failed, refunded…
 
             // ─── Montant et devise ───
@@ -21,14 +28,21 @@ return new class extends Migration
             $table->string('currency', 10);
 
             // ─── Métadonnées et relations ───
-            $table->unsignedBigInteger('user_id')->nullable();
+            $table->unsignedBigInteger('user_id')->nullable()->index();
             $table->json('metadata')->nullable();
 
             $table->timestamp('processed_at')->nullable();
 
             $table->timestamps();
 
-            $table->foreign('user_id')->references('id')->on('users')->onDelete('set null');
+            $table->foreign('user_id')
+                  ->references('id')->on('users')
+                  ->onDelete('set null');
+
+            // Unicités "où non null" (si tu veux empêcher les doublons par identifiant Stripe)
+            // NB: MySQL autorise plusieurs NULLs dans un index unique, c’est OK.
+            $table->unique('session_id');
+            $table->unique('payment_intent_id');
         });
     }
 

@@ -12,21 +12,23 @@ class PaymentEnLigne extends Model
     protected $table = 'payment_en_lignes';
 
     /**
-     * Les champs pouvant être remplis en masse
+     * Champs remplissables
      */
     protected $fillable = [
-        'provider',             // stripe, paypal…
-        'provider_payment_id',  // id unique provider (pi_xxx, PAYID-xxx…)
-        'status',               // succeeded, failed, pending…
-        'amount',               // montant en centimes
-        'currency',             // EUR, USD…
-        'user_id',              // lien vers l’utilisateur
-        'metadata',             // données additionnelles
-        'processed_at',         // date de traitement provider
+        'provider',              // stripe, paypal…
+        'provider_payment_id',   // compat: id générique (peut contenir cs_ ou pi_)
+        'session_id',            // Stripe Checkout session (cs_...)
+        'payment_intent_id',     // Stripe PaymentIntent (pi_...)
+        'status',                // succeeded, failed, pending, refunded…
+        'amount',                // centimes
+        'currency',              // EUR, USD…
+        'user_id',               // user lié (nullable)
+        'metadata',              // JSON
+        'processed_at',          // datetime traitée
     ];
 
     /**
-     * Casting automatique des colonnes
+     * Casts
      */
     protected $casts = [
         'metadata'     => 'array',
@@ -51,15 +53,13 @@ class PaymentEnLigne extends Model
     /**
      * ─── Relations ───
      */
-
-    // Chaque paiement appartient à un utilisateur (facultatif)
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
     /**
-     * ─── Scopes pratiques ───
+     * ─── Scopes ───
      */
     public function scopeSucceeded($query)
     {
@@ -69,6 +69,16 @@ class PaymentEnLigne extends Model
     public function scopeFailed($query)
     {
         return $query->where('status', self::STATUS_FAILED);
+    }
+
+    public function scopeBySession($query, string $sessionId)
+    {
+        return $query->where('session_id', $sessionId);
+    }
+
+    public function scopeByPaymentIntent($query, string $piId)
+    {
+        return $query->where('payment_intent_id', $piId);
     }
 
     /**
@@ -82,5 +92,11 @@ class PaymentEnLigne extends Model
     public function isFailed(): bool
     {
         return $this->status === self::STATUS_FAILED;
+    }
+
+    // Accesseur pratique: montant en unité (€, $…)
+    public function getAmountDecimalAttribute(): float
+    {
+        return $this->amount / 100;
     }
 }
