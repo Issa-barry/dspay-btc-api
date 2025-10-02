@@ -19,66 +19,74 @@ class PaymentIntentStoreController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'amount'     => 'required|integer|min:50',     // centimes (ex: 1000 = 10,00 €)
-            'currency'   => 'nullable|string|in:eur,usd',  // CB => EUR/USD
-            'metadata'   => 'array',
-            'order_id'   => 'nullable|string|max:100',
-            'force_new'  => 'sometimes|boolean',           // annule l’ancien PI si même order_id
-            'dev'        => 'sometimes|boolean',           // en DEV, idempotence plus souple
+            'amount'    => 'required|integer|min:50',            // centimes
+            'currency'  => 'nullable|string|in:eur,usd',
+            'metadata'  => 'sometimes|array',
+            'order_id'  => 'sometimes|nullable|string|max:100',  // clé métier/id commande
+            'force_new' => 'sometimes|boolean',                  // force l’abandon de l’ancien PI
+            'dev'       => 'sometimes|boolean',                  // idempotence souple en DEV
         ]);
 
-        $currency  = $validated['currency'] ?? 'eur';
-        $orderId   = $validated['order_id'] ?? null;
-        $forceNew  = (bool) ($validated['force_new'] ?? false);
-        $isDev     = (bool) ($validated['dev'] ?? false);
+        $currency = $validated['currency'] ?? 'eur';
+        $orderId  = $validated['order_id'] ?? null;
+        $forceNew = (bool) ($validated['force_new'] ?? false);
+        $isDev    = (bool) ($validated['dev'] ?? false);
 
-        // Métadonnées enrichies
+        // Métadonnées enrichies (utile pour le webhook)
         $metadata = array_merge([
             'source'   => 'payment_intent',
             'order_id' => $orderId,
+            'user_id'  => optional($request->user())->id,
         ], $validated['metadata'] ?? []);
 
-        Stripe::setApiKey(config('services.stripe.secret'));
+        // Clé API Stripe
+        $secret = config('services.stripe.secret');
+        if (empty($secret)) {
+            Log::error('Stripe secret manquant (services.stripe.secret)');
+            return $this->responseJson(false, 'Configuration Stripe manquante', null, 500);
+        }
+        Stripe::setApiKey($secret);
 
         try {
-            // ─────────────────────────────────────────────────────────────────────────────
-            // 1) Si order_id fourni : tenter de RÉUTILISER un PaymentIntent existant
-            // ─────────────────────────────────────────────────────────────────────────────
+            /**
+             * 1) Si un order_id est fourni, on tente de RÉUTILISER un PaymentIntent existant
+             *    (même montant/devise + statut réutilisable). Sinon, on annulera l’ancien.
+             */
             if ($orderId) {
-                $existing = PaymentEnLigne::where('provider', 'stripe')
-                    ->where('metadata->order_id', $orderId)
+                $existing = PaymentEnLigne::query()
+                    ->where('provider', 'stripe')
                     ->whereNotNull('payment_intent_id')
+                    ->where('metadata->order_id', $orderId)   // JSON path (MySQL 5.7+/MariaDB 10.2+)
+                    ->latest('id')
                     ->first();
 
                 if ($existing) {
-                    // Si on force la création d’un nouveau PI → on annule l’ancien
-                    if ($forceNew) {
-                        try {
-                            PaymentIntent::cancel($existing->payment_intent_id);
-                        } catch (\Throwable $e) {
-                            Log::warning('Annulation PI échouée (force_new)', [
-                                'pi' => $existing->payment_intent_id,
-                                'err' => $e->getMessage()
+                    try {
+                        $pi = PaymentIntent::retrieve($existing->payment_intent_id);
+
+                        // Déjà payé ?
+                        if ($pi->status === 'succeeded') {
+                            return $this->responseJson(true, 'Paiement déjà confirmé', [
+                                'clientSecret' => $pi->client_secret,
+                                'id'           => $pi->id,
+                                'status'       => $pi->status,
+                                'alreadyPaid'  => true,
                             ]);
                         }
-                        // on poursuivra vers la création d’un nouveau PI (plus bas)
-                    } else {
-                        // Sinon on tente la réutilisation si paramètres identiques
-                        $pi = PaymentIntent::retrieve($existing->payment_intent_id);
 
                         $sameAmount   = ((int) $pi->amount)   === (int) $validated['amount'];
                         $sameCurrency = (string) $pi->currency === (string) $currency;
 
-                        $reusableStatuses = [
+                        $reusable = in_array($pi->status, [
                             'requires_payment_method',
-                            'requires_confirmation',
                             'requires_action',
+                            'requires_confirmation',
                             'processing',
-                            'requires_capture'
-                        ];
+                            'requires_capture',
+                        ], true);
 
-                        if ($sameAmount && $sameCurrency && in_array($pi->status, $reusableStatuses, true)) {
-                            // ✅ Réutilisation : renvoyer le client_secret existant
+                        if (!$forceNew && $sameAmount && $sameCurrency && $reusable) {
+                            // ✅ Réutilisation de l’intent existant
                             return $this->responseJson(true, 'PaymentIntent réutilisé', [
                                 'clientSecret' => $pi->client_secret,
                                 'id'           => $pi->id,
@@ -86,50 +94,46 @@ class PaymentIntentStoreController extends Controller
                             ]);
                         }
 
-                        // Montant/devise changés → on annule l’ancien et on créera un nouveau
-                        try {
-                            PaymentIntent::cancel($pi->id);
-                        } catch (\Throwable $e) {
-                            Log::warning('Annulation PI échouée (params modifiés)', [
-                                'pi' => $pi->id,
-                                'err' => $e->getMessage()
-                            ]);
+                        // Sinon : on annule l’ancien (si annulable) puis on créera un nouveau
+                        try { PaymentIntent::cancel($pi->id); }
+                        catch (\Throwable $e) {
+                            Log::warning('Annulation PI échouée', ['pi' => $pi->id, 'err' => $e->getMessage()]);
                         }
+
+                    } catch (\Throwable $e) {
+                        // Si la récupération de l’intent échoue, on poursuivra vers la création
+                        Log::warning('Retrieve PaymentIntent échoué', ['err' => $e->getMessage()]);
                     }
                 }
             }
 
-            // ─────────────────────────────────────────────────────────────────────────────
-            // 2) Création d’un NOUVEAU PaymentIntent (CB uniquement)
-            // ─────────────────────────────────────────────────────────────────────────────
-            // Idempotence :
-            // - En prod : si order_id → clé stable basée sur order_id
-            // - En dev  : clé aléatoire pour éviter les conflits pendant les tests
+            /**
+             * 2) Création d’un NOUVEAU PaymentIntent
+             *    - Idempotence: stable en prod (basée sur order_id), aléatoire en dev
+             */
             $idempotencyKey = $isDev
-                ? ('pi_'.Str::uuid())                   // DEV: clé aléatoire
-                : ($orderId ? 'pi_'.$orderId : 'pi_'.Str::uuid()); // PROD: stable si order_id
+                ? 'pi_'.Str::uuid()
+                : ($orderId ? 'pi_'.$orderId : 'pi_'.Str::uuid());
 
             $intent = PaymentIntent::create([
-                'amount'               => $validated['amount'],
+                'amount'               => (int) $validated['amount'],
                 'currency'             => $currency,
-                'payment_method_types' => ['card'],     // ⬅️ CB uniquement
+                'payment_method_types' => ['card'], // CB
                 'metadata'             => $metadata,
-                // 'description'        => 'Paiement DSPay', // optionnel
-                // 'statement_descriptor'=> 'DSPAY',          // optionnel, contraintes pays
             ], [
                 'idempotency_key' => $idempotencyKey,
             ]);
 
-            // ─────────────────────────────────────────────────────────────────────────────
-            // 3) Trace/Upsert en base
-            // ─────────────────────────────────────────────────────────────────────────────
+            /**
+             * 3) Trace locale (upsert) — statut mappé
+             */
             PaymentEnLigne::updateOrCreate(
                 ['payment_intent_id' => $intent->id],
                 [
                     'provider'            => 'stripe',
-                    'provider_payment_id' => $intent->id, // compat
+                    'provider_payment_id' => $intent->id,
                     'session_id'          => null,
-                    'status'              => 'pending',
+                    'status'              => PaymentEnLigne::mapStripeStatus($intent->status), // -> pending au départ
                     'amount'              => (int) $validated['amount'],
                     'currency'            => $currency,
                     'user_id'             => optional($request->user())->id,
@@ -138,21 +142,20 @@ class PaymentIntentStoreController extends Controller
                 ]
             );
 
-           return $this->responseJson(true, 'PaymentIntent créé avec succès', [
+            return $this->responseJson(true, 'PaymentIntent créé avec succès', [
                 'clientSecret' => $intent->client_secret,
                 'id'           => $intent->id,
                 'status'       => $intent->status,
-                'livemode'     => (bool) $intent->livemode, // ← vrai en live
-                'server_mode'  => str_starts_with(config('services.stripe.secret'), 'sk_live_') ? 'live' : 'test',
+                'livemode'     => (bool) $intent->livemode,
+                'server_mode'  => str_starts_with($secret, 'sk_live_') ? 'live' : 'test',
             ]);
-
 
         } catch (ApiErrorException $e) {
             Log::error('Stripe API error', ['msg' => $e->getMessage()]);
             return $this->responseJson(false, 'Erreur Stripe : '.$e->getMessage(), null, 422);
 
         } catch (\Throwable $e) {
-            Log::error('PaymentIntent store failed', ['msg' => $e->getMessage()]);
+            Log::error('PaymentIntent store failed', ['msg' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return $this->responseJson(false, 'Erreur serveur : '.$e->getMessage(), null, 500);
         }
     }
