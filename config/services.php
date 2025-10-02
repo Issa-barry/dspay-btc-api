@@ -38,6 +38,7 @@ return [
         'key'            => env('STRIPE_KEY'),
         'secret'         => env('STRIPE_SECRET'),
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+        'use_hosted_confirmation'  => (bool) env('STRIPE_USE_HOSTED_CONFIRMATION', false),
     ],
 
 ];
