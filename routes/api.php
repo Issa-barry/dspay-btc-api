@@ -16,3 +16,9 @@ Route::prefix('v1')->group(function () {
     require __DIR__.'/api/conversions.php';
     require __DIR__.'/api/payment.php';
 });
+
+ 
+
+Route::post('payments/stripe/webhook', function () {
+    return response()->json(['ok' => true]);
+});
