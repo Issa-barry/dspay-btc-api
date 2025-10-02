@@ -16,6 +16,9 @@ Route::middleware(['auth:sanctum','throttle:60,1'])
         Route::post('create-payment-intent', [PaymentIntentStoreController::class, 'store'])
             ->name('payment-intent.store');
 
+          
+
+
         // Création d'une session Stripe Checkout
         Route::post('checkout-session', [CheckoutSessionStoreController::class, 'store'])
             ->name('checkout.store');
@@ -24,3 +27,5 @@ Route::middleware(['auth:sanctum','throttle:60,1'])
 Route::post('/payments/stripe/webhook', [WebhookController::class, 'handle'])
     ->name('stripe.webhook')
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
+//   Route::get('payments/stripe/webhook', [WebhookController::class, 'index']);
