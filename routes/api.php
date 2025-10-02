@@ -1,5 +1,7 @@
  <?php
 
+use App\Http\Controllers\Payment\Stripe\PaymentIntentStoreController;
+use App\Http\Controllers\Payment\Stripe\WebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -18,7 +20,3 @@ Route::prefix('v1')->group(function () {
 });
 
  
-
-Route::post('payments/stripe/webhook', function () {
-    return response()->json(['ok' => true]);
-});

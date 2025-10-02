@@ -16,6 +16,11 @@ class PaymentIntentStoreController extends Controller
 {
     use JsonResponseTrait;
 
+      public function index(Request $r)
+    {
+       return response()->json(['iba' => true]);  
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
