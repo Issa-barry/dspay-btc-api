@@ -5,8 +5,8 @@
 use App\Http\Controllers\Payment\Stripe\{
     PaymentIntentStoreController,
     CheckoutSessionStoreController,
-    WebhookHandleController
-};
+    WebhookController,
+ };
 
 Route::middleware(['auth:sanctum','throttle:60,1'])
     ->prefix('payments/stripe')->name('payments.stripe.')
@@ -18,5 +18,6 @@ Route::middleware(['auth:sanctum','throttle:60,1'])
         Route::post('checkout-session', [CheckoutSessionStoreController::class, 'store'])->name('checkout.store');
 
         // ─── Webhook Stripe (⚠️ pas d’auth, Stripe appelle en externe) ───
-        Route::post('webhook', [WebhookHandleController::class, 'handle'])->withoutMiddleware(['auth:sanctum'])->name('webhook.handle');
+        Route::post('webhook', [WebhookController::class, 'handle'])->withoutMiddleware(['auth:sanctum'])->name('webhook.handle');
     });
+ 
