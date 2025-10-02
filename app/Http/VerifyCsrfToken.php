@@ -13,6 +13,9 @@ class VerifyCsrfToken extends Middleware
      */
     protected $except = [
         //
+        // iba
+        'api/v1/payments/stripe/webhook',
+        'payments/stripe/webhook', // selon ton chemin exact
     ];
 
 /*Il est également possible que VerifyCsrfToken soit référencé dans un tableau $middlewareGroups comme dans ce cas pour le groupe web :
