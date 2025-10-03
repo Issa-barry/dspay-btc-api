@@ -11,6 +11,7 @@ use Stripe\Stripe;
 use Stripe\Checkout\Session as CheckoutSession;
 use Stripe\Exception\ApiErrorException;
 use App\Models\PaymentEnLigne;
+use App\Models\Transfert;
 use App\Traits\JsonResponseTrait;
 
 class CheckoutSessionStoreController extends Controller
@@ -119,5 +120,33 @@ class CheckoutSessionStoreController extends Controller
             ]);
             return $this->responseJson(false, 'Erreur serveur : ' . $e->getMessage(), null, 500);
         }
+    }
+
+    public function show(string $sessionId)
+    {
+        $pel = PaymentEnLigne::where('session_id', $sessionId)->first();
+
+        if (!$pel) {
+            return $this->responseJson(false, 'Session inconnue', null, 404);
+        }
+
+        // Si le webhook a terminé, on peut remonter le transfert
+        $meta = is_array($pel->metadata) ? $pel->metadata : [];
+        $transfert = null;
+        if (!empty($meta['transfert_id'])) {
+            $transfert = Transfert::with('beneficiaire') // si tu as la relation
+                ->find($meta['transfert_id']);
+        }
+
+        return $this->responseJson(true, 'Checkout session status', [
+            'session_id'   => $pel->session_id,
+            'status'       => $pel->status,           // pending | processing | succeeded | failed | canceled | paid
+            'amount'       => $pel->amount,           // en centimes
+            'currency'     => $pel->currency,
+            'processed_at' => $pel->processed_at,
+            'metadata'     => $meta,
+            'transfert_id' => $meta['transfert_id'] ?? null,
+            'transfert'    => $transfert,            // peut être null tant que non finalisé
+        ]);
     }
 }
