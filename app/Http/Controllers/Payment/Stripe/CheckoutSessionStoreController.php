@@ -6,26 +6,39 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
 use Stripe\Stripe;
 use Stripe\Checkout\Session as CheckoutSession;
 use Stripe\Exception\ApiErrorException;
 use App\Models\PaymentEnLigne;
+use App\Traits\JsonResponseTrait;
 
 class CheckoutSessionStoreController extends Controller
 {
+    use JsonResponseTrait;
+
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        // ⚠️ On n'utilise pas $request->validate() pour pouvoir renvoyer notre JSON 422
+        $validator = Validator::make($request->all(), [
             'amount'         => 'required|integer|min:50',      // centimes
             'currency'       => 'nullable|string|in:eur,usd',
             'success_url'    => 'required|url',
             'cancel_url'     => 'required|url',
             'customer_email' => 'nullable|email',
-            'metadata'       => 'array',
+            'metadata'       => 'nullable|array',
             'order_id'       => 'nullable|string|max:100',
         ]);
 
-        // ↳ normalisations sans changer la logique
+        if ($validator->fails()) {
+            return $this->responseJson(false, 'Validation error', [
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+
+        // ↳ normalisations
         $currency = $validated['currency'] ?? 'eur';
         $success  = rtrim($validated['success_url'], '/');
         $cancel   = rtrim($validated['cancel_url'], '/');
@@ -43,21 +56,19 @@ class CheckoutSessionStoreController extends Controller
         $secret = config('services.stripe.secret');
         if (empty($secret)) {
             Log::error('Stripe secret manquant (services.stripe.secret)');
-            return response()->json([
-                'message' => 'Configuration Stripe manquante',
-            ], 500);
+            return $this->responseJson(false, 'Configuration Stripe manquante', null, 500);
         }
 
         Stripe::setApiKey($secret);
 
         try {
             $session = CheckoutSession::create([
-                'mode'           => 'payment',
-                'success_url'    => $success . '?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url'     => $cancel,
-                'customer_email' => $validated['customer_email'] ?? null,
-                'allow_promotion_codes'      => true,
-                'billing_address_collection' => 'auto',
+                'mode'                        => 'payment',
+                'success_url'                 => $success . '?session_id={CHECKOUT_SESSION_ID}',
+                'cancel_url'                  => $cancel,
+                'customer_email'              => $validated['customer_email'] ?? null,
+                'allow_promotion_codes'       => true,
+                'billing_address_collection'  => 'auto',
                 'line_items' => [[
                     'price_data' => [
                         'currency'     => $currency,
@@ -92,24 +103,21 @@ class CheckoutSessionStoreController extends Controller
                 ]
             );
 
-            return response()->json([
+            return $this->responseJson(true, 'Checkout session created', [
                 'id'  => $session->id,
                 'url' => $session->url,
-            ]);
+            ], 201);
 
         } catch (ApiErrorException $e) {
             Log::warning('Stripe Checkout error', ['msg' => $e->getMessage()]);
-            return response()->json([
-                'message' => 'Erreur Stripe : ' . $e->getMessage(),
-            ], 422);
+            return $this->responseJson(false, 'Erreur Stripe : ' . $e->getMessage(), null, 422);
+
         } catch (\Throwable $e) {
             Log::error('CheckoutSession store failed', [
                 'msg'   => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-            return response()->json([
-                'message' => 'Erreur serveur : ' . $e->getMessage(),
-            ], 500);
+            return $this->responseJson(false, 'Erreur serveur : ' . $e->getMessage(), null, 500);
         }
     }
 }
