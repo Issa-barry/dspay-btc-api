@@ -49,15 +49,22 @@ class WebhookController extends Controller
                     ->first();
 
                 if ($pel) {
+                    // Attache PI s'il existe
                     if (!empty($cs->payment_intent) && empty($pel->payment_intent_id)) {
                         $pel->payment_intent_id = (string) $cs->payment_intent;
+                    }
+
+                    // Fusion d’un éventuel “twin” (ligne créée par PI)
+                    if (!empty($cs->payment_intent)) {
+                        $twin = PaymentEnLigne::where('payment_intent_id', (string) $cs->payment_intent)
+                            ->where('id', '!=', $pel->id)->first();
+                        if ($twin) $this->mergePelTwins($pel, $twin);
                     }
 
                     $pel->status = $cs->payment_status === 'paid'
                         ? 'succeeded'
                         : (string) $cs->payment_status;
 
-                    // customer_details peut être null → null-safe
                     $emailFromCheckout = $cs->customer_details?->email
                         ?? $cs->customer_email
                         ?? null;
@@ -71,17 +78,22 @@ class WebhookController extends Controller
                         'source'         => $oldMeta['source'] ?? 'checkout',
                     ]);
 
+                    // ⭐ Sauvegarder AVANT la finalisation
+                    $pel->save();
+
                     if ($cs->payment_status === 'paid' && empty($pel->processed_at)) {
                         try {
-                            $this->finalizeAfterSuccess($pel);
-                            $pel->processed_at = now();
+                            $ok = $this->finalizeAfterSuccess($pel); // écrit metadata.transfert_id
+                            if ($ok) {
+                                // Recharger pour récupérer la metadata mise à jour
+                                $pel->refresh();
+                                $pel->processed_at = now();
+                                $pel->save();
+                            }
                         } catch (\Throwable $e) {
                             Log::error('Finalize (checkout) failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
-                            // Stripe doit recevoir 2xx
                         }
                     }
-
-                    $pel->save();
                 } else {
                     Log::warning('Checkout session completed but no local row found', ['session_id' => $cs->id]);
                 }
@@ -91,66 +103,83 @@ class WebhookController extends Controller
 
             // ──────────────────────────────
             // 2) PAYMENT INTENT (Elements & co)
-            //  - Whitelist d’événements utiles
-            //  - Jamais rétrograder un statut "succeeded"
             // ──────────────────────────────
             if (str_starts_with($event->type, 'payment_intent.')) {
                 /** @var \Stripe\PaymentIntent $pi */
                 $pi = $event->data->object;
 
-                // Seuls ces events doivent impacter le statut
                 $typeToStatus = [
                     'payment_intent.succeeded'      => 'succeeded',
                     'payment_intent.canceled'       => 'canceled',
                     'payment_intent.payment_failed' => 'failed',
                     'payment_intent.processing'     => 'processing',
-                    // IGNORE: created / requires_* / updated...
                 ];
-
                 if (!isset($typeToStatus[$event->type])) {
-                    Log::info('PI event ignored to prevent demotion', ['type' => $event->type]);
+                    Log::info('PI event ignored', ['type' => $event->type]);
                     return new Response('OK', 200);
                 }
-
                 $newStatus = $typeToStatus[$event->type];
 
-                $pel = PaymentEnLigne::firstOrCreate(
-                    ['payment_intent_id' => (string) $pi->id],
-                    [
-                        'provider'            => 'stripe',
-                        'provider_payment_id' => (string) $pi->id,
-                        'status'              => 'pending',
-                    ]
-                );
+                // Essayer d'attacher au Checkout via order_id
+                $orderId = $pi->metadata->order_id ?? null;
+                $pel = null;
+                if ($orderId) {
+                    $pel = PaymentEnLigne::where('metadata->order_id', $orderId)->first();
+                }
 
-                // ⚠️ Ne jamais rétrograder un succeeded
+                // Sinon, fallback sur payment_intent_id
+                if (!$pel) {
+                    $pel = PaymentEnLigne::firstOrCreate(
+                        ['payment_intent_id' => (string) $pi->id],
+                        [
+                            'provider'            => 'stripe',
+                            'provider_payment_id' => (string) $pi->id,
+                            'status'              => 'pending',
+                        ]
+                    );
+                } else {
+                    if (empty($pel->payment_intent_id)) {
+                        $pel->payment_intent_id = (string) $pi->id;
+                    }
+                }
+
+                // Jamais rétrograder
                 if ($pel->status === 'succeeded' && $newStatus !== 'succeeded') {
                     Log::info('Skip status demotion', ['current' => $pel->status, 'new' => $newStatus]);
                     return new Response('OK', 200);
                 }
 
                 $pel->amount   = (int) ($pi->amount ?? $pel->amount ?? 0);
-                $pel->currency = (string) ($pi->currency ?? $pel->currency ?? 'eur');
+                $pel->currency = strtolower((string) ($pi->currency ?? $pel->currency ?? 'eur'));
                 $pel->status   = $newStatus;
 
-                $oldMeta    = is_array($pel->metadata) ? $pel->metadata : [];
-                $metaStripe = $this->toArraySafe($pi->metadata ?? []);
+                $metaStripe = [];
+                if (isset($pi->metadata) && is_iterable($pi->metadata)) {
+                    foreach ($pi->metadata as $k => $v) { $metaStripe[$k] = $v; }
+                }
+
+                $oldMeta = is_array($pel->metadata) ? $pel->metadata : [];
                 $pel->metadata = array_merge($oldMeta, $metaStripe, [
                     'customer_email' => $oldMeta['customer_email'] ?? null,
                     'last_event'     => $event->type,
                     'livemode'       => (bool) ($pi->livemode ?? false),
                 ]);
 
+                // ⭐ Sauvegarder AVANT la finalisation
+                $pel->save();
+
                 if ($newStatus === 'succeeded' && empty($pel->processed_at)) {
                     try {
-                        $this->finalizeAfterSuccess($pel);
-                        $pel->processed_at = now();
+                        $ok = $this->finalizeAfterSuccess($pel);
+                        if ($ok) {
+                            $pel->refresh();
+                            $pel->processed_at = now();
+                            $pel->save();
+                        }
                     } catch (\Throwable $e) {
                         Log::error('Finalize (PI) failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
                     }
                 }
-
-                $pel->save();
 
                 return new Response('OK', 200);
             }
@@ -165,25 +194,52 @@ class WebhookController extends Controller
     }
 
     /**
-     * Finalisation métier (idempotente) :
-     * - crée Transfert à partir des metadata (beneficiaire_id, taux_echange_id, montant_envoie…)
-     * - crée Facture
-     * - envoie email
-     * - marque metadata.transfert_id (idempotence)
+     * Rejoue la finalisation (utile pour réparer une session déjà payée).
      */
-    protected function finalizeAfterSuccess(PaymentEnLigne $pel): void
+    public function reprocess(string $sessionId)
+    {
+        $pel = PaymentEnLigne::where('session_id', $sessionId)->first();
+        if (!$pel) return $this->responseJson(false, 'Session inconnue', null, 404);
+
+        $ok = false;
+        try {
+            $ok = $this->finalizeAfterSuccess($pel);
+            if ($ok && empty($pel->processed_at)) {
+                $pel->refresh();
+                $pel->processed_at = now();
+                $pel->save();
+            }
+        } catch (\Throwable $e) {
+            Log::error('Reprocess failed: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
+        }
+
+        $meta = is_array($pel->metadata) ? $pel->metadata : [];
+        return $this->responseJson(true, 'Reprocess terminé', [
+            'status'       => $pel->status,
+            'processed_at' => $pel->processed_at,
+            'transfert_id' => $meta['transfert_id'] ?? null,
+        ]);
+    }
+
+    /**
+     * Finalisation métier. Retourne true si un transfert a été créé (ou déjà présent).
+     */
+    protected function finalizeAfterSuccess(PaymentEnLigne $pel): bool
     {
         $meta = is_array($pel->metadata) ? $pel->metadata : [];
         if (!empty($pel->processed_at) || !empty($meta['transfert_id'])) {
-            return; // déjà traité
+            return true; // déjà traité
         }
 
-        DB::transaction(function () use ($pel) {
+        $created = false;
+
+        DB::transaction(function () use ($pel, &$created) {
             /** @var PaymentEnLigne $locked */
             $locked = PaymentEnLigne::whereKey($pel->id)->lockForUpdate()->first();
             $lockedMeta = is_array($locked->metadata) ? $locked->metadata : [];
 
             if (!empty($locked->processed_at) || !empty($lockedMeta['transfert_id'])) {
+                $created = true;
                 return;
             }
 
@@ -205,7 +261,11 @@ class WebhookController extends Controller
                 return;
             }
 
-            $taux = (int) optional(TauxEchange::find($tauxId))->taux;
+            // Fallback : metadata.taux_applique -> DB
+            $taux = (int) ($lockedMeta['taux_applique'] ?? 0);
+            if ($taux <= 0) {
+                $taux = (int) optional(TauxEchange::find($tauxId))->taux;
+            }
             if ($taux <= 0) {
                 Log::warning('Finalize skipped: invalid taux', ['taux_id' => $tauxId, 'taux' => $taux]);
                 return;
@@ -248,23 +308,42 @@ class WebhookController extends Controller
 
             try {
                 $to = $transfert->expediteur->email ?? $customerEmail;
-                if ($to) {
-                    Mail::to($to)->send(new TransfertNotification($transfert));
-                }
+                if ($to) Mail::to($to)->send(new TransfertNotification($transfert));
             } catch (\Throwable $e) {
                 Log::warning('Email transfert non envoyé: '.$e->getMessage());
             }
 
             $lockedMeta['transfert_id'] = $transfert->id;
-            if (isset($facture->id)) {
-                $lockedMeta['facture_id'] = $facture->id;
-            }
+            if (isset($facture->id)) $lockedMeta['facture_id'] = $facture->id;
+
             $locked->metadata = $lockedMeta;
             $locked->save();
+
+            $created = true;
         });
+
+        return $created;
     }
 
     // ────────────────────────────── Helpers ──────────────────────────────
+
+    private function mergePelTwins(PaymentEnLigne $target, PaymentEnLigne $source): void
+    {
+        if ($target->id === $source->id) return;
+
+        $metaT = is_array($target->metadata) ? $target->metadata : [];
+        $metaS = is_array($source->metadata) ? $source->metadata : [];
+        $target->metadata = array_replace($metaS, $metaT); // priorité au target
+
+        if (!$target->payment_intent_id && $source->payment_intent_id) $target->payment_intent_id = $source->payment_intent_id;
+        if (!$target->amount && $source->amount) $target->amount = $source->amount;
+        if (!$target->currency && $source->currency) $target->currency = $source->currency;
+        if ($source->status === 'succeeded') $target->status = 'succeeded';
+        if (!$target->processed_at && $source->processed_at) $target->processed_at = $source->processed_at;
+
+        $target->save();
+        // $source->delete(); // si tu souhaites nettoyer
+    }
 
     private function calculerFraisEuro(float $montantEuro): float
     {
@@ -288,8 +367,10 @@ class WebhookController extends Controller
     private function toArraySafe($meta): array
     {
         if (is_array($meta)) return $meta;
-        if (is_object($meta) && method_exists($meta, 'toArray')) {
-            return $meta->toArray();
+        if (is_object($meta) && method_exists($meta, 'toArray')) return $meta->toArray();
+        if (is_string($meta)) {
+            $j = json_decode($meta, true);
+            return is_array($j) ? $j : [];
         }
         return [];
     }

@@ -28,4 +28,7 @@ Route::post('/payments/stripe/webhook', [WebhookController::class, 'handle'])
     ->name('stripe.webhook')
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
+    Route::get('payments/stripe/checkout-session/{sessionId}', [\App\Http\Controllers\Payment\Stripe\CheckoutSessionStoreController::class, 'show'])
+    ->name('payments.stripe.checkout.show');
+
 //   Route::get('payments/stripe/webhook', [WebhookController::class, 'index']);
