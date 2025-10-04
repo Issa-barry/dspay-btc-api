@@ -20,7 +20,7 @@ use App\Http\Controllers\Auth\{
 Route::post('/login', LoginController::class)->name('auth.login');
 
 /* NOTE : tu utilises ces URLs côté front, on les garde telles quelles */
-Route::post('/SendResetPasswordLink', PasswordResetLinkController::class)->name('auth.sendReset');
+Route::post('/sendResetPasswordLink', PasswordResetLinkController::class)->name('auth.sendReset');
 Route::post('/ResetPassword',        ResetPasswordController::class)->name('auth.reset');
 
 /* Vérification email via lien signé */
