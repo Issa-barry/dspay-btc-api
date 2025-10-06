@@ -18,11 +18,13 @@ class CheckoutSessionStoreController extends Controller
 {
     use JsonResponseTrait;
 
+    /**
+     * Création d'une session Stripe Checkout
+     */
     public function store(Request $request)
     {
-        // ⚠️ On n'utilise pas $request->validate() pour pouvoir renvoyer notre JSON 422
         $validator = Validator::make($request->all(), [
-            'amount'         => 'required|integer|min:50',      // centimes
+            'amount'         => 'required|integer|min:50', // en centimes
             'currency'       => 'nullable|string|in:eur,usd',
             'success_url'    => 'required|url',
             'cancel_url'     => 'required|url',
@@ -32,27 +34,32 @@ class CheckoutSessionStoreController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->responseJson(false, 'Validation error', [
+            return $this->responseJson(false, 'Erreur de validation', [
                 'errors' => $validator->errors(),
             ], 422);
         }
 
         $validated = $validator->validated();
 
-        // ↳ normalisations
         $currency = $validated['currency'] ?? 'eur';
         $success  = rtrim($validated['success_url'], '/');
         $cancel   = rtrim($validated['cancel_url'], '/');
+        $orderId  = $validated['order_id'] ?? (string) Str::uuid();
+
+        // Jeton d'annulation unique
+        $cancelToken = Str::uuid();
 
         $metadata = array_merge([
-            'source'   => 'checkout',
-            'order_id' => $validated['order_id'] ?? null,
+            'source'       => 'checkout',
+            'order_id'     => $orderId,
+            'cancel_token' => $cancelToken,
         ], $validated['metadata'] ?? []);
 
-        // Idempotence stable
-        $idempotencyKey = ($validated['order_id'] ?? false)
-            ? 'checkout_' . $validated['order_id']
-            : 'checkout_' . Str::uuid();
+        // Construction des URLs avec paramètres
+        $successUrl = $success . '?session_id={CHECKOUT_SESSION_ID}';
+        $cancelUrl  = $cancel . '?order_id=' . urlencode($orderId) . '&cancel_token=' . urlencode($cancelToken);
+
+        $idempotencyKey = 'checkout_' . $orderId;
 
         $secret = config('services.stripe.secret');
         if (empty($secret)) {
@@ -64,12 +71,13 @@ class CheckoutSessionStoreController extends Controller
 
         try {
             $session = CheckoutSession::create([
-                'mode'                        => 'payment',
-                'success_url'                 => $success . '?session_id={CHECKOUT_SESSION_ID}',
-                'cancel_url'                  => $cancel,
-                'customer_email'              => $validated['customer_email'] ?? null,
-                'allow_promotion_codes'       => true,
-                'billing_address_collection'  => 'auto',
+                'mode'                       => 'payment',
+                'success_url'                => $successUrl,
+                'cancel_url'                 => $cancelUrl,
+                'customer_email'             => $validated['customer_email'] ?? null,
+                'allow_promotion_codes'      => true,
+                'billing_address_collection' => 'auto',
+                'client_reference_id'        => $orderId,
                 'line_items' => [[
                     'price_data' => [
                         'currency'     => $currency,
@@ -90,27 +98,28 @@ class CheckoutSessionStoreController extends Controller
                 ['session_id' => $session->id],
                 [
                     'provider'            => 'stripe',
-                    'provider_payment_id' => $session->id, // compat
+                    'provider_payment_id' => $session->id,
                     'payment_intent_id'   => null,
                     'status'              => 'pending',
                     'amount'              => (int) $validated['amount'],
                     'currency'            => $currency,
                     'user_id'             => optional($request->user())->id,
                     'metadata'            => [
-                        'session_id' => $session->id,
-                        'order_id'   => $validated['order_id'] ?? null,
+                        'session_id'   => $session->id,
+                        'order_id'     => $orderId,
+                        'cancel_token' => $cancelToken,
                     ] + $metadata,
                     'processed_at'        => null,
                 ]
             );
 
-            return $this->responseJson(true, 'Checkout session created', [
+            return $this->responseJson(true, 'Checkout session créée', [
                 'id'  => $session->id,
                 'url' => $session->url,
             ], 201);
 
         } catch (ApiErrorException $e) {
-            Log::warning('Stripe Checkout error', ['msg' => $e->getMessage()]);
+            Log::warning('Erreur Stripe Checkout', ['msg' => $e->getMessage()]);
             return $this->responseJson(false, 'Erreur Stripe : ' . $e->getMessage(), null, 422);
 
         } catch (\Throwable $e) {
@@ -122,6 +131,52 @@ class CheckoutSessionStoreController extends Controller
         }
     }
 
+    /**
+     * Lorsqu'un utilisateur clique sur le bouton "Retour" (cancel_url)
+     */
+    public function cancel(Request $request)
+    {
+        $orderId = $request->query('order_id');
+        $token   = $request->query('cancel_token');
+
+        if (!$orderId) {
+            return $this->responseJson(false, 'Paramètre order_id manquant', null, 422);
+        }
+
+        $pel = PaymentEnLigne::where('metadata->order_id', $orderId)->first();
+
+        if (!$pel) {
+            return $this->responseJson(false, 'Session inconnue', null, 404);
+        }
+
+        // Vérifie le token d’annulation
+        if ($token && data_get($pel->metadata, 'cancel_token') !== $token) {
+            return $this->responseJson(false, 'Jeton invalide', null, 403);
+        }
+
+        if (in_array($pel->status, ['succeeded', 'paid', 'processing'])) {
+            return $this->responseJson(true, 'Paiement déjà traité', [
+                'session_id' => $pel->session_id,
+                'status'     => $pel->status
+            ]);
+        }
+
+        $pel->update([
+            'status'       => 'canceled',
+            'processed_at' => now(),
+        ]);
+
+        Log::info('Paiement annulé par utilisateur', ['order_id' => $orderId]);
+
+        return $this->responseJson(true, 'Paiement annulé par l’utilisateur', [
+            'session_id' => $pel->session_id,
+            'status'     => $pel->status
+        ]);
+    }
+
+    /**
+     * Récupération de l’état d’une session Stripe
+     */
     public function show(string $sessionId)
     {
         $pel = PaymentEnLigne::where('session_id', $sessionId)->first();
@@ -130,23 +185,22 @@ class CheckoutSessionStoreController extends Controller
             return $this->responseJson(false, 'Session inconnue', null, 404);
         }
 
-        // Si le webhook a terminé, on peut remonter le transfert
         $meta = is_array($pel->metadata) ? $pel->metadata : [];
         $transfert = null;
+
         if (!empty($meta['transfert_id'])) {
-            $transfert = Transfert::with('beneficiaire') // si tu as la relation
-                ->find($meta['transfert_id']);
+            $transfert = Transfert::with('beneficiaire')->find($meta['transfert_id']);
         }
 
-        return $this->responseJson(true, 'Checkout session status', [
+        return $this->responseJson(true, 'État de la session Stripe', [
             'session_id'   => $pel->session_id,
-            'status'       => $pel->status,           // pending | processing | succeeded | failed | canceled | paid
-            'amount'       => $pel->amount,           // en centimes
+            'status'       => $pel->status,
+            'amount'       => $pel->amount,
             'currency'     => $pel->currency,
             'processed_at' => $pel->processed_at,
             'metadata'     => $meta,
             'transfert_id' => $meta['transfert_id'] ?? null,
-            'transfert'    => $transfert,            // peut être null tant que non finalisé
+            'transfert'    => $transfert,
         ]);
     }
 }
