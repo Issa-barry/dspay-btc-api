@@ -29,6 +29,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])
         // Récupération du statut d’une session Checkout
         Route::get('checkout-session/{sessionId}', [CheckoutSessionStoreController::class, 'show'])
             ->name('checkout.show');
+            
     });
 
 // ───────────────────────────────
