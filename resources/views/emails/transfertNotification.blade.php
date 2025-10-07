@@ -63,6 +63,23 @@
                   </td>
                 </tr>
 
+                <!--  Frais -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Frais</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;">
+                    {{ number_format((float)$transfert->frais, 2, ',', ' ') }} {{ $devSrc }}
+                  </td>
+                </tr>
+
+                <!-- Taux -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Taux</td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;">
+                    {{--  1 {{ $devSrc }} = {{ $transfert->taux_applique }} {{ $devDst }}  --}}
+                     1 {{ $devSrc }} = {{ number_format((float)$transfert->taux_applique, 0, ',', ' ') }} {{ $devDst }}
+                  </td>
+                </tr>
+
                 <!-- Bénéficiaire -->
                 <tr>
                   <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Bénéficiaire</td>
