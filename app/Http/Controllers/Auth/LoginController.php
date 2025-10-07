@@ -21,7 +21,7 @@ class LoginController extends Controller
         ], [
             'email.required'    => "L'adresse email est obligatoire.",
             'email.email'       => "Le format de l'adresse email est invalide.",
-            'password.required' => 'Le mot de passe est requis.',
+            'password.required' => 'Le mot de passe est obligatoire.',
         ]);
         if ($v->fails()) {
             return $this->responseJson(false, 'Échec de validation.', $v->errors(), 422);
@@ -29,7 +29,7 @@ class LoginController extends Controller
 
         $user = User::where('email', $request->email)->first();
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->responseJson(false, 'Les informations de connexion sont incorrectes.', null, 401);
+            return $this->responseJson(false, 'Email ou mot de passe incorrect.', null, 401);
         }
 
         if (!$user->hasVerifiedEmail()) {
