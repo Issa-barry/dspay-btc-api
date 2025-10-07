@@ -18,12 +18,14 @@ class ResetPasswordController extends Controller
 
     public function __invoke(Request $request)
     {
+ 
         // ✅ Validation "API" (pas de page HTML)
         $v = Validator::make($request->all(), [
             'token'                 => ['required'],
             'email'                 => ['required','email'],
             'password'              => ['required','string','min:8'],
             'password_confirmation' => ['required','same:password'], // <- séparé du champ password
+ 
         ], [
             'token.required'                 => 'Le lien de réinitialisation est invalide ou expiré.',
             'email.required'                 => "L'adresse email est obligatoire.",
@@ -38,9 +40,11 @@ class ResetPasswordController extends Controller
             return $this->responseJson(false, 'Échec de validation.', $v->errors(), 422);
         }
 
-        // Tentative de reset
+ 
+        // 2) Tentative de reset
+ 
         $status = Password::reset(
-            $request->only('email','password','password_confirmation','token'),
+            $request->only('email', 'password', 'password_confirmation', 'token'),
             function ($user, $password) {
                 $verifiedAt = $user->getOriginal('email_verified_at');
 
@@ -54,39 +58,54 @@ class ResetPasswordController extends Controller
             }
         );
 
+ 
         // Mapping des statuts -> erreurs par champ + code HTTP
+     
+        // 3) Mapping des statuts -> erreurs par champ + code HTTP
         if ($status !== Password::PASSWORD_RESET) {
-            $data = [];
+            $mapData = [];
+ 
             $message = 'Impossible de réinitialiser le mot de passe.';
             $http = 422;
 
             switch ($status) {
                 case Password::INVALID_TOKEN:
+ 
                     $data = ['token' => ['Le lien de réinitialisation est invalide ou a expiré.']];
+ 
                     $message = 'Lien invalide ou expiré. Obtenez un nouveau lien.';
                     break;
 
                 case Password::INVALID_USER:
+ 
                     $data = ['email' => ["Cette adresse email ne correspond pas à la demande de réinitialisation."]];
+ 
                     $message = 'Adresse email invalide pour cette demande.';
                     break;
 
                 case Password::RESET_THROTTLED: // selon version Laravel
+ 
                     $data = ['email' => ['Veuillez patienter avant de réessayer.']];
+ 
                     $message = 'Vous avez tenté trop de fois. Réessayez plus tard.';
                     $http = 429;
                     break;
 
                 default:
+                    $mapData = ['email' => [__($status)]];  // au cas où un autre statut serait ajouté dans le futur
                     $data = ['email' => [__($status)]];
+ 
                     $message = 'Réinitialisation impossible pour le moment.';
                     break;
             }
 
+ 
             return $this->responseJson(false, $message, $data, $http);
         }
 
         // Succès
+ 
+ 
         $user = User::where('email', $request->email)->first();
         $payload = ['user' => $user];
 
