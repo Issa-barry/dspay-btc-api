@@ -7,28 +7,34 @@ use App\Http\Controllers\Payment\Stripe\{
     WebhookController,
 };
 
-// ─── Paiement (auth obligatoire) ───
-Route::middleware(['auth:sanctum','throttle:60,1'])
+// ───────────────────────────────
+// ⚡ Stripe Payment (auth requis)
+// ───────────────────────────────
+Route::middleware(['auth:sanctum', 'throttle:60,1'])
     ->prefix('payments/stripe')
     ->name('payments.stripe.')
     ->group(function () {
-        // Création PaymentIntent (Stripe Elements)
+        // Création d’un PaymentIntent (Stripe Elements)
         Route::post('create-payment-intent', [PaymentIntentStoreController::class, 'store'])
             ->name('payment-intent.store');
 
-          
-
-
-        // Création d'une session Stripe Checkout
+        // Création d’une session Stripe Checkout
         Route::post('checkout-session', [CheckoutSessionStoreController::class, 'store'])
             ->name('checkout.store');
+
+        // Annulation (retour utilisateur via cancel_url)
+        Route::get('checkout-session/cancel', [CheckoutSessionStoreController::class, 'cancel'])
+            ->name('checkout.cancel');
+
+        // Récupération du statut d’une session Checkout
+        Route::get('checkout-session/{sessionId}', [CheckoutSessionStoreController::class, 'show'])
+            ->name('checkout.show');
+            
     });
 
+// ───────────────────────────────
+// ⚡ Webhook Stripe (public, sans CSRF)
+// ───────────────────────────────
 Route::post('/payments/stripe/webhook', [WebhookController::class, 'handle'])
     ->name('stripe.webhook')
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
-
-    Route::get('payments/stripe/checkout-session/{sessionId}', [\App\Http\Controllers\Payment\Stripe\CheckoutSessionStoreController::class, 'show'])
-    ->name('payments.stripe.checkout.show');
-
-//   Route::get('payments/stripe/webhook', [WebhookController::class, 'index']);
