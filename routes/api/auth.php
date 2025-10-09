@@ -4,12 +4,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\{
     LoginController,
     LogoutController,
-    MeController,
     PasswordResetLinkController,
     ResetPasswordController,
     VerifyEmailController,
     ResendVerificationController,
-    CheckTokenController
+    CheckTokenController,
+    MeController
 };
 
 /*
@@ -43,5 +43,21 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get ('/check-token-header', CheckTokenController::class)->name('auth.checkToken');
 
     /* On garde /users/me ici côté auth, même si tu as un fichier users.php pour le reste */
-    Route::get('/users/me', MeController::class)->name('auth.me');
+    // Route::get('/users/me', MeController::class)->name('auth.me');
+    // Route::get('/me',MeController::class)->name('auth.me'); 
+
+
+   Route::get('users/me', MeController::class)->name('auth.me');
+
+
 });
+
+
+ 
+//  Route::get('/ping', function () {
+//     return response()->json([
+//         'success' => true,
+//         'message' => 'pong',
+//         'time' => now()->toDateTimeString(),
+//     ]);
+// });

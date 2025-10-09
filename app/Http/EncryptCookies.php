@@ -12,6 +12,7 @@ class EncryptCookies extends BaseEncryptCookies
      * @var array
      */
     protected $except = [
-        //
+        // 'XSRF-TOKEN',
+         'access_token',
     ];
 }

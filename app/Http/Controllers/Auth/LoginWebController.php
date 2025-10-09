@@ -31,67 +31,40 @@ class LoginWebController extends Controller
                 return $this->responseJson(false, 'Échec de validation.', $v->errors(), 422);
             }
 
-            // 2️⃣ Log pour debug
-            Log::info('Tentative de connexion', [
-                'email' => $request->email,
-                'ip' => $request->ip(),
-            ]);
-
-            // 3️⃣ Tentative de connexion avec 'remember' = true
-            $credentials = $request->only('email', 'password');
-            
-            if (!Auth::attempt($credentials, true)) {
-                Log::warning('Échec authentification', ['email' => $request->email]);
+            // 2️⃣ Tentative de connexion
+            if (!Auth::attempt($request->only('email', 'password'), true)) {
                 return $this->responseJson(false, 'Email ou mot de passe incorrect.', null, 401);
             }
 
-            // 4️⃣ Récupérer l'utilisateur AVANT la régénération
+            // 3️⃣ Regénération sécurisée de la session
+            try {
+                $request->session()->regenerate();
+            } catch (Throwable $e) {
+                Log::error('Erreur lors de la régénération de la session : ' . $e->getMessage());
+                return $this->responseJson(false, 'Erreur de session. Veuillez réessayer.', null, 500);
+            }
+
             $user = Auth::user();
-            
-            Log::info('Authentification réussie', [
-                'user_id' => $user->id,
-                'email' => $user->email,
-            ]);
 
-            // 5️⃣ Régénération de la session (protection contre session fixation)
-            $request->session()->regenerate();
-            
-            // 6️⃣ Log après régénération
-            Log::info('Session régénérée', [
-                'session_id' => $request->session()->getId(),
-                'user_authenticated' => Auth::check(),
-                'user_id_in_session' => Auth::id(),
-            ]);
-
-            // 7️⃣ Vérification email
+            // 4️⃣ Vérification email
             if (!$user->hasVerifiedEmail()) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
-
-                Log::warning('Email non vérifié', ['user_id' => $user->id]);
 
                 return $this->responseJson(false, "Votre email n'a pas été vérifié.", [
                     'email' => $user->email,
                 ], 403);
             }
 
-            // 8️⃣ Succès - Recharger l'utilisateur pour être sûr
-            $user = Auth::user()->load('role'); // Charger aussi le rôle si nécessaire
-
-            Log::info('Login complet', [
-                'user_id' => $user->id,
-                'session_id' => $request->session()->getId(),
-            ]);
-
+            // 5️⃣ Succès
             return $this->responseJson(true, 'Connexion réussie.', [
                 'user' => $user,
             ]);
 
         } catch (Throwable $e) {
-            // 9️⃣ Catch global
-            Log::error('Erreur interne lors du login web', [
-                'message' => $e->getMessage(),
+            // 6️⃣ Catch global : aucune erreur PHP ne fuit vers le front
+            Log::error('Erreur interne lors du login web : ' . $e->getMessage(), [
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
                 'trace' => $e->getTraceAsString(),
