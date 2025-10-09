@@ -50,14 +50,10 @@ Route::middleware('auth:sanctum')->group(function () {
    Route::get('users/me', MeController::class)->name('auth.me');
 
 
+//  Route::get('iba', [MeController::class, 'index'])->name('index');
+
 });
 
-
+//  Route::get('iba', [MeController::class, 'index'])->name('index');
  
-//  Route::get('/ping', function () {
-//     return response()->json([
-//         'success' => true,
-//         'message' => 'pong',
-//         'time' => now()->toDateTimeString(),
-//     ]);
-// });
+ 
