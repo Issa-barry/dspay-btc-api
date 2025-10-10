@@ -14,26 +14,16 @@ class MeController extends Controller
 
     public function __invoke(Request $request)
     {
-        // ✅ Vérifie si l'utilisateur est authentifié
-        if (!Auth::check()) { 
-            // Détruit complètement la session invalide
-            try {
-                $request->session()->invalidate();
-                $request->session()->regenerateToken();
-            } catch (\Throwable $e) {
-                Log::warning('Erreur lors de la destruction de session : ' . $e->getMessage());
-            }
-            
-            return $this->responseJson(
-                false, 
-                'Non authentifié. Votre session a expiré.', 
-                null, 
-                401
-            );
+        // ✅ En API Sanctum, ne pas utiliser la session
+        // On s'appuie sur l'utilisateur déjà authentifié par 'auth:sanctum'
+        $user = $request->user();
+
+        if (!$user) {
+            return $this->responseJson(false, 'Non authentifié.', null, 401);
         }
 
-        // ✅ Récupère l'utilisateur connecté et masque les champs sensibles
-        $user = $request->user()->makeHidden(['password', 'remember_token']);
+        // Masquer les champs sensibles
+        $user = $user->makeHidden(['password', 'remember_token']);
         
         return $this->responseJson(
             true, 

@@ -19,8 +19,13 @@ class AuthenticateFromCookie
         if (!$request->bearerToken()) {
             // Chercher le token dans le cookie
             $token = $request->cookie('access_token');
-            
-            if ($token) {
+            // Décoder au cas où le client a encodé l'URL (ex: %7C)
+            if (is_string($token)) {
+                $token = urldecode($token);
+                $token = trim($token);
+            }
+
+            if (!empty($token)) {
                 // Ajouter le token au header Authorization pour que Sanctum puisse l'utiliser
                 $request->headers->set('Authorization', 'Bearer ' . $token);
             }

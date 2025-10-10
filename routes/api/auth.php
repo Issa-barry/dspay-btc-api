@@ -47,10 +47,14 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route::get('/me',MeController::class)->name('auth.me'); 
 
 
-   Route::get('users/me', MeController::class)->name('auth.me');
+//    Route::get('users/me', MeController::class)->name('auth.me')->middleware(['api']);
+
+Route::middleware(['cookie.token.to.bearer', 'auth:sanctum'])
+    ->get('users/me', MeController::class);
 
 
-//  Route::get('iba', [MeController::class, 'index'])->name('index');
+
+ Route::get('test-endpoint', [MeController::class, 'index'])->name('index');
 
 });
 
