@@ -21,8 +21,7 @@ return [
     //     Sanctum::currentApplicationUrlWithPort()
     // ))),
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', 'localhost,127.0.0.1')),
-
+'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', 'localhost,localhost:4200,127.0.0.1,localhost:8000,::1')),
 
     /*
     |--------------------------------------------------------------------------

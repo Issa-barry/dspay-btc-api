@@ -17,3 +17,4 @@ Route::middleware(['auth:sanctum','throttle:60,1'])
         Route::put('updateById/{id}', [BeneficiaireUpdateController::class, 'updateById'])->name('update');
         Route::delete('deleteById/{id}', [BeneficiaireDeleteController::class, 'deleteById'])->name('delete');
     });
+ 

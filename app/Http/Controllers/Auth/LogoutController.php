@@ -12,8 +12,9 @@ class LogoutController extends Controller
 
     public function __invoke(Request $request)
     {
-        // Déconnecte uniquement le token courant
+        // Révoquer le token courant uniquement
         $request->user()->currentAccessToken()?->delete();
-        return $this->responseJson(true, 'Déconnecté.');
+
+        return $this->responseJson(true, 'Déconnexion réussie.');
     }
 }

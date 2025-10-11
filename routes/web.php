@@ -1,27 +1,17 @@
 <?php
 
+use App\Http\Controllers\Auth\LoginCookieController;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Controllers\CsrfCookieController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
 
-use Illuminate\Support\Facades\Auth;
+Route::get('/', fn () => view('welcome'));
 
-// Auth::routes(['verify' => true]);
+ // 1) Cookie XSRF + session (DOIT être sous "web")
+Route::get('/sanctum/csrf-cookie', [CsrfCookieController::class, 'show'])->middleware('web');
 
-use App\Models\Transfert;
-use App\Mail\TransfertNotification;
- 
-
-Route::get('/preview-email', function () {
-    $transfert = \App\Models\Transfert::with(['deviseSource', 'deviseCible'])->first(); // Exemple avec données réelles
-
-    return view('emails.transfertNotification', ['transfert' => $transfert]);
-});
-
-Route::get('/preview-email-retrait', function () {
-    $transfert = \App\Models\Transfert::with(['deviseSource', 'deviseCible'])->first(); // Exemple avec données réelles
-
-    return view('emails.transfertRetire', ['transfert' => $transfert]);
+// 2) Login/Logout "session-based"
+Route::prefix('web')->middleware('web')->group(function () {
+    Route::post('/login',  LoginCookieController::class)->middleware('guest')->name('web.login');
+    //  Route::get('/login2',  [LoginCookieController::class, 'index'])->name('web.login2');
 });

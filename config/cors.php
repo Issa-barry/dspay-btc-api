@@ -15,19 +15,33 @@ return [
     |
     */
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    // 'paths' => ['api/*', 'sanctum/csrf-cookie'], //avant 
+    'paths' => ['api/*', 'web/*', 'sanctum/csrf-cookie', 'login', 'logout'],
+     
 
     'allowed_methods' => ['*'], // Permet toutes les méthodes HTTP (GET, POST, etc.)
 
-     'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', '')),// Autoriser votre frontend Angular
+    //  'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', '')),// Autoriser votre frontend Angular
+     'allowed_origins' => [
+        'http://localhost:4200',
+        'http://127.0.0.1:4200',
+         // Ajouter Postman si nécessaire (mais normalement pas besoin)
+    ],
+
+      
+    // 'allowed_origins' => ['*'], // Permet toutes les origines (utile pour le développement, à restreindre en production)
+
 
     'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => ['Authorization'], // Autoriser les en-têtes spécifiques si nécessaires
+    // 'exposed_headers' => ['Authorization'], // Autoriser les en-têtes spécifiques si nécessaires // avant
+    'exposed_headers' => [], // Autoriser les en-têtes spécifiques si nécessaires
 
-    'max_age' => 0,
+    // 'max_age' => 0, //avant
+    
+    'max_age' => 86400,
 
     'supports_credentials' => true, // Autoriser les cookies et autres informations sensibles
 ];

@@ -1,62 +1,103 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
+namespace App\Http\Controllers\Auth;
 
-return new class extends Migration
+use App\Http\Controllers\Controller;
+use App\Traits\JsonResponseTrait;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Log;
+use Throwable;
+
+class LoginWebController extends Controller
 {
-    /**
-     * Run the migrations.
-     */
-    public function up(): void
-    {
-        Schema::create('users', function (Blueprint $table) {
-            $table->id();
-            $table->string('reference', 5)->unique();
-            $table->string('nom', 100)->nullable();
-            $table->string('prenom', 150)->nullable();
-            $table->string('phone')->unique();
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
-             $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])->default('attente');
-            $table->date('date_naissance')->default('9999-12-31');
-            $table->enum('civilite', ['Mr', 'Mme', 'Mlle', 'Autre'])->default('Autre');
-            $table->string('password'); 
-            $table->foreignId('role_id')->constrained('roles')->onDelete('restrict')->default(1);
-            //  $table->foreignId('adresse_id')->nullable()->constrained('adresses')->nullOnDelete();
+    use JsonResponseTrait;
 
-    
-            // Ajout de la clé étrangère vers la table agences
-            // $table->foreignId('agence_id')->nullable()->constrained('agences')->onDelete('set null');
-    
-            $table->rememberToken(); 
-            $table->timestamps();
-        });
-    
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
-    
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
-        });
-    }
-    
-    /**
-     * Reverse the migrations.
-     */
-    public function down(): void
+    public function __invoke(Request $request)
     {
-        Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
-        Schema::dropIfExists('sessions');
+        try {
+            // 1️⃣ Validation
+            $v = Validator::make($request->all(), [
+                'email'    => 'required|email',
+                'password' => 'required|string',
+            ], [
+                'email.required'    => "L'adresse email est obligatoire.",
+                'email.email'       => "Le format de l'adresse email est invalide.",
+                'password.required' => 'Le mot de passe est obligatoire.',
+            ]);
+
+            if ($v->fails()) {
+                return $this->responseJson(false, 'Échec de validation.', $v->errors(), 422);
+            }
+
+            // 2️⃣ Log pour debug
+            Log::info('Tentative de connexion', [
+                'email' => $request->email,
+                'ip' => $request->ip(),
+            ]);
+
+            // 3️⃣ Tentative de connexion avec 'remember' = true
+            $credentials = $request->only('email', 'password');
+            
+            if (!Auth::attempt($credentials, true)) {
+                Log::warning('Échec authentification', ['email' => $request->email]);
+                return $this->responseJson(false, 'Email ou mot de passe incorrect.', null, 401);
+            }
+
+            // 4️⃣ Récupérer l'utilisateur AVANT la régénération
+            $user = Auth::user();
+            
+            Log::info('Authentification réussie', [
+                'user_id' => $user->id,
+                'email' => $user->email,
+            ]);
+
+            // 5️⃣ Régénération de la session (protection contre session fixation)
+            $request->session()->regenerate();
+            
+            // 6️⃣ Log après régénération
+            Log::info('Session régénérée', [
+                'session_id' => $request->session()->getId(),
+                'user_authenticated' => Auth::check(),
+                'user_id_in_session' => Auth::id(),
+            ]);
+
+            // 7️⃣ Vérification email
+            if (!$user->hasVerifiedEmail()) {
+                Auth::logout();
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+
+                Log::warning('Email non vérifié', ['user_id' => $user->id]);
+
+                return $this->responseJson(false, "Votre email n'a pas été vérifié.", [
+                    'email' => $user->email,
+                ], 403);
+            }
+
+            // 8️⃣ Succès - Recharger l'utilisateur pour être sûr
+            $user = Auth::user()->load('role'); // Charger aussi le rôle si nécessaire
+
+            Log::info('Login complet', [
+                'user_id' => $user->id,
+                'session_id' => $request->session()->getId(),
+            ]);
+
+            return $this->responseJson(true, 'Connexion réussie.', [
+                'user' => $user,
+            ]);
+
+        } catch (Throwable $e) {
+            // 9️⃣ Catch global
+            Log::error('Erreur interne lors du login web', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return $this->responseJson(false, 'Une erreur interne est survenue. Veuillez réessayer plus tard.', null, 500);
+        }
     }
-};
+}
