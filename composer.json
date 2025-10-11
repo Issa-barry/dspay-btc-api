@@ -12,7 +12,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
         "spatie/laravel-permission": "^6.10",
-        "stripe/stripe-php": "^17.6"
+        "stripe/stripe-php": "^18.0"
     },
     "require-dev": {
         "barryvdh/laravel-debugbar": "^3.14",

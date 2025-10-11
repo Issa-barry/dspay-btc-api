@@ -41,4 +41,4 @@ return [
         'use_hosted_confirmation'  => (bool) env('STRIPE_USE_HOSTED_CONFIRMATION', false),
     ],
 
-];
+]; 

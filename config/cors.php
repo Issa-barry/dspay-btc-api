@@ -16,8 +16,8 @@ return [
     */
 
     // 'paths' => ['api/*', 'sanctum/csrf-cookie'], //avant 
-        // 'paths' => ['api/*', 'web/*', 'sanctum/csrf-cookie', 'login', 'logout'],
-     'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*', 'web/*', 'sanctum/csrf-cookie', 'login', 'logout'],
+     
 
     'allowed_methods' => ['*'], // Permet toutes les méthodes HTTP (GET, POST, etc.)
 
@@ -27,6 +27,10 @@ return [
         'http://127.0.0.1:4200',
          // Ajouter Postman si nécessaire (mais normalement pas besoin)
     ],
+
+      
+    // 'allowed_origins' => ['*'], // Permet toutes les origines (utile pour le développement, à restreindre en production)
+
 
     'allowed_origins_patterns' => [],
 
