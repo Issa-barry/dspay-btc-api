@@ -21,12 +21,16 @@ return [
 
     'allowed_methods' => ['*'], // Permet toutes les méthodes HTTP (GET, POST, etc.)
 
-    //  'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', '')),// Autoriser votre frontend Angular
-     'allowed_origins' => [
-        'http://localhost:4200',
-        'http://127.0.0.1:4200',
-         // Ajouter Postman si nécessaire (mais normalement pas besoin)
-    ],
+     'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', 
+     'http://localhost:4200', 
+     'http://127.0.0.1:4200', 
+     ' https://pre-prod.dspay.fr/')
+    ),// Autoriser votre frontend Angular
+    //  'allowed_origins' => [
+    //     'http://localhost:4200',
+    //     'http://127.0.0.1:4200',
+    //      // Ajouter Postman si nécessaire (mais normalement pas besoin)
+    // ],
 
       
     // 'allowed_origins' => ['*'], // Permet toutes les origines (utile pour le développement, à restreindre en production)
