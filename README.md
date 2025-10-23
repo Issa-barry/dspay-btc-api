@@ -78,3 +78,5 @@ php artisan optimize:clear
 php artisan route:clear
 php artisan config:clear
 λ curl -i http://localhost:8000/sanctum/csrf-cookie
+
+stripe listen --forward-to http://localhost:8000/api/v1/payments/stripe/webhook

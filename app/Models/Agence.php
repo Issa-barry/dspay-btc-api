@@ -4,51 +4,38 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-
 class Agence extends Model
 {
-    use HasFactory;
+     use HasFactory;
 
-    protected $fillable = [ 
-        // 'reference',
-        'nom_agence',
+    protected $fillable = [
+        'nom', 
         'phone',
-        'email', 
+        'email',
         'statut',
-        'date_creation',
-        'adresse_id',
-        'responsable_id'
+        'pays',
+        'ville',
+        'quartier',
+        // 'reference' n'est PAS fillable : on la génère automatiquement
     ];
-
-    public function responsable() 
-    {
-        return $this->belongsTo(User::class, 'responsable_id');
-    }
-
-    public function users()
-    {
-        return $this->hasMany(User::class);
-    }
-
-    public function adresse()
-    {
-        return $this->belongsTo(Adresse::class);
-    }
 
     protected static function booted()
     {
-        static::creating(function ($user) {
-            $user->reference = self::generateUniqueReference();
+        static::creating(function (Agence $agence) {
+            if (empty($agence->reference)) {
+                $agence->reference = self::generateUniqueReference();
+            }
         });
     }
 
-    public static function generateUniqueReference()
+    public static function generateUniqueReference(): string
     {
         do {
-            $reference = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 2)) . rand(10, 99) . rand(0, 9);
+            $letters   = strtoupper(substr(str_shuffle('ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 0, 2));
+            $digits    = str_pad((string) random_int(0, 9999), 4, '0', STR_PAD_LEFT);
+            $reference = $letters.$digits;
         } while (self::where('reference', $reference)->exists());
 
         return $reference;
     }
-
 }

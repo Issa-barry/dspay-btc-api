@@ -13,20 +13,27 @@ return new class extends Migration
     {
         Schema::create('agences', function (Blueprint $table) {
             $table->id();
+
+            // 6 caractères (2 lettres + 4 chiffres), unique
             $table->string('reference', 6)->unique();
-            $table->string('nom_agence');
+
+            $table->string('nom');
             $table->string('phone')->unique();
             $table->string('email')->unique();
-            $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])->default('attente');
-            $table->timestamp('date_creation')->default(now());
-            $table->foreignId('adresse_id')->constrained('adresses')->onDelete('cascade');
-            // $table->foreignId('responsable_id')->nullable()->constrained('users')->onDelete('set null');
-            $table->timestamps();
+
+            $table->enum('statut', ['active', 'attente', 'bloque', 'archive'])
+                  ->default('attente');
+
+            // Adresse non séparée
+            $table->string('pays');
+            $table->string('ville');
+            $table->string('quartier');
+             $table->timestamps();
         });
     }
 
     /** 
-     * Reverse the migrations.
+     * Reverse the migrations. 
      */
     public function down(): void
     {
