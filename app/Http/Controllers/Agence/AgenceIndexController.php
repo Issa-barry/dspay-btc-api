@@ -7,45 +7,64 @@ use App\Models\Agence;
 use App\Traits\JsonResponseTrait;
 use Illuminate\Http\Request;
 use Illuminate\Database\QueryException;
-use Throwable;
+use Illuminate\Validation\ValidationException;
 
 class AgenceIndexController extends Controller
 {
     use JsonResponseTrait;
 
-    public function index(Request $request)
+    public function index(Request $r)
     {
         try {
-            // Pagination
-            $perPage = (int) $request->query('per_page', 15);
-            if ($perPage <= 0) {
-                $perPage = 15;
-            }
+            // ✅ Validation des paramètres d’entrée
+            $r->validate([
+                'search'   => 'nullable|string|max:100',
+                'per_page' => 'nullable|integer|min:1|max:100',
+            ]);
 
-            $query = Agence::query()->orderByDesc('id');
+            // ✅ Alias rétro-compatibilité: accepter aussi ?q=
+            $search = $r->filled('search') ? $r->string('search')->toString()
+                                           : $r->string('q')->toString();
 
-            // Recherche facultative
-            if ($search = trim($request->query('q', ''))) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('nom', 'like', "%$search%")
-                        ->orWhere('phone', 'like', "%$search%")
-                        ->orWhere('email', 'like', "%$search%")
-                        ->orWhere('ville', 'like', "%$search%")
-                        ->orWhere('quartier', 'like', "%$search%")
-                        ->orWhere('reference', 'like', "%$search%");
+            // Base de la requête
+            $q = Agence::query();
+
+            // 👉 si multi-tenant, décommente:
+            // $q->where('user_id', $r->user()->id);
+
+            // 🔎 Filtre de recherche
+            if (!empty($search)) {
+                $q->where(function ($qq) use ($search) {
+                    $like = "%{$search}%";
+                    $qq->where('nom', 'like', $like)
+                       ->orWhere('phone', 'like', $like)
+                       ->orWhere('email', 'like', $like)
+                       ->orWhere('ville', 'like', $like)
+                       ->orWhere('quartier', 'like', $like)
+                       ->orWhere('reference', 'like', $like);
                 });
             }
 
-            $agences = $query->paginate($perPage);
+            $perPage = (int) ($r->per_page ?? 10);
+            $page    = $q->orderByDesc('id')->paginate($perPage);
 
-            return $this->responseJson(true, 'Liste des agences récupérée avec succès.', $agences);
+            // ✅ Réponse uniformisée { items, meta }
+            return $this->responseJson(true, 'Liste des agences.', [
+                'items' => $page->items(),
+                'meta'  => [
+                    'total'        => $page->total(),
+                    'per_page'     => $page->perPage(),
+                    'current_page' => $page->currentPage(),
+                    'last_page'    => $page->lastPage(),
+                ],
+            ]);
 
+        } catch (ValidationException $e) {
+            return $this->responseJson(false, 'Échec de la validation des paramètres.', $e->errors(), 422);
         } catch (QueryException $e) {
-            // Erreur SQL (ex : table inexistante, colonne inconnue)
             return $this->responseJson(false, 'Erreur de base de données.', $e->getMessage(), 500);
-        } catch (Throwable $e) {
-            // Autres erreurs (PHP, logique, etc.)
-            return $this->responseJson(false, 'Une erreur interne est survenue lors de la récupération des agences.', $e->getMessage(), 500);
+        } catch (\Throwable $e) {
+            return $this->responseJson(false, 'Erreur lors de la récupération des agences.', $e->getMessage(), 500);
         }
     }
 }

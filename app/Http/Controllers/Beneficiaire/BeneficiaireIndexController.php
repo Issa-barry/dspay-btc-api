@@ -15,7 +15,7 @@ class BeneficiaireIndexController extends Controller
 
     public function index(Request $r)
     {
-        try {
+        try { 
             $r->validate([
                 'search'   => 'nullable|string|max:100',
                 'per_page' => 'nullable|integer|min:1|max:100',

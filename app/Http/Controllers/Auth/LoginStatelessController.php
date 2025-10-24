@@ -10,36 +10,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
-/**
- * LoginStatelessController - Authentification Token Pure (Stateless)
- * 
- * Différences avec LoginBearerController :
- * - Gestion d'expiration des tokens
- * - Support refresh token (optionnel)
- * - Révocation des anciens tokens
- * - Plus de métadonnées sur le token
- */
 class LoginStatelessController extends Controller
 {
     use JsonResponseTrait;
 
-    /**
-     * Login stateless avec token Sanctum
-     * 
-     * Flow :
-     * 1. Validation credentials
-     * 2. Vérification user + password
-     * 3. Génération token avec expiration
-     * 4. Retour token + user en JSON
-     * 
-     * Usage Frontend :
-     * - Stocker token dans localStorage/IndexedDB
-     * - Envoyer dans header : Authorization: Bearer {token}
-     * - Pas de cookies, pas de CSRF
-     */
     public function __invoke(Request $request): JsonResponse
     {
-        // 1) Validation
+        // 1️⃣ Validation des champs
         $validator = Validator::make($request->all(), [
             'email'    => ['required', 'email'],
             'password' => ['required', 'string', 'min:6'],
@@ -51,75 +28,54 @@ class LoginStatelessController extends Controller
         ]);
 
         if ($validator->fails()) {
-            return $this->responseJson(
-                false, 
-                'Échec de validation.', 
-                $validator->errors(), 
-                422
-            );
+            return $this->responseJson(false, 'Échec de validation.', $validator->errors(), 422);
         }
 
-        // 2) Vérification utilisateur
+        // 2️⃣ Vérifie si le user existe et si le mot de passe est correct
         $user = User::where('email', $request->email)->first();
 
+        // ⚠️ Sécurité : même message pour mail inexistant ou mot de passe erroné
         if (!$user || !Hash::check($request->password, $user->password)) {
             return $this->responseJson(
-                false, 
-                'Identifiants incorrects.', 
-                null, 
+                false,
+                'Email ou mot de passe incorrect.',
+                null,
                 401
             );
         }
 
-        // 3) Vérification email (optionnel)
+        // 3️⃣ Vérifie si l’adresse email a été confirmée
         if (!$user->hasVerifiedEmail()) {
             return $this->responseJson(
-                false, 
-                "Veuillez vérifier votre email avant de vous connecter.", 
-                ['email' => $user->email], 
+                false,
+                "Veuillez vérifier votre email avant de vous connecter.",
+                ['email' => $user->email],
                 403
             );
         }
 
-        // 4) Révocation des anciens tokens (optionnel - limite à 1 session active)
-        // Décommenter si vous voulez forcer une seule session :
+        // 4️⃣ (Optionnel) Révoquer les anciens tokens si tu veux une seule session active
         // $user->tokens()->delete();
 
-        // 5) Création du token avec expiration (30 minutes)
-        $expiresAt = now()->addMinutes(30);
-        
-        $token = $user->createToken(
-            'access_token',           // Nom du token
-            ['*'],                    // Abilities (permissions)
-            $expiresAt                // Expiration
-        );
+        // 5️⃣ Génération du token avec expiration (30 min)
+        $expiresAt = now()->addMinutes(120);
+        $token = $user->createToken('access_token', ['*'], $expiresAt);
 
-        // 6) Masquer les champs sensibles
+        // 6️⃣ Masquer les infos sensibles
         $user->makeHidden(['password', 'remember_token']);
 
-        // 7) Réponse avec token
-        return $this->responseJson(
-            true, 
-            'Connexion réussie.', 
-            [
-                'user'         => $user,
-                'access_token' => $token->plainTextToken,
-                'token_type'   => 'Bearer',
-                'expires_in'   => 1800, // 30 minutes en secondes
-                'expires_at'   => $expiresAt->toIso8601String(),
-            ], 
-            200
-        );
+        // 7️⃣ Réponse OK
+        return $this->responseJson(true, 'Connexion réussie.', [
+            'user'         => $user,
+            'access_token' => $token->plainTextToken,
+            'token_type'   => 'Bearer',
+            'expires_in'   => 1800,
+            'expires_at'   => $expiresAt->toIso8601String(),
+        ], 200);
     }
 
-    /**
-     * Endpoint de test
-     */
     public function index(): JsonResponse
     {
-        return $this->responseJson(
-            true, 
-            'LoginStatelessController fonctionne correctement.'
-        );
+        return $this->responseJson(true, 'LoginStatelessController fonctionne correctement.');
     }
 }
