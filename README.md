@@ -72,9 +72,13 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 ``php artisan db:seed --class=FraisSeeder``
 `php artisan db:seed --class=TauxEchangeSeeder`
 ### ou simplement
-`php artisan db:seed`
+php artisan db:seed
 ## commande 
 php artisan optimize:clear
 php artisan route:clear
 php artisan config:clear
 λ curl -i http://localhost:8000/sanctum/csrf-cookie
+
+stripe listen --forward-to http://localhost:8000/api/v1/payments/stripe/webhook
+
+stripe listen --forward-to http://127.0.0.1:8000/api/v1/payments/stripe/webhook

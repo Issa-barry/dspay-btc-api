@@ -129,7 +129,7 @@ Des transferts rapides, fiables et adaptés à vos besoins.                     
                     </main>
 
                     <footer class="py-16 text-center text-sm text-black dark:text-white/70">
-                        V2.1.0 | 20.03.2025
+                        V1.1.0 | 24.10.2025
                       <!-- Laravel v{{ Illuminate\Foundation\Application::VERSION }} (PHP v{{ PHP_VERSION }})-->
                     </footer>
                 </div>
