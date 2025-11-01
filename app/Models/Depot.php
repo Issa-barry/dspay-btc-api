@@ -10,6 +10,7 @@ class Depot extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'serviceId',
         'amount',
         'recipientTel',
@@ -19,6 +20,11 @@ class Depot extends Model
         'transaction_ref',
     ];
 
+     public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+    
     /**
      * Génère automatiquement la référence du dépôt.
      */
