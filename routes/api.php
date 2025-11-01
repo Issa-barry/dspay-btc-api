@@ -1,5 +1,6 @@
  <?php
 
+use App\Http\Controllers\Auth\MeController;
 use App\Http\Controllers\Payment\Stripe\PaymentIntentStoreController;
 use App\Http\Controllers\Payment\Stripe\WebhookController;
 use Illuminate\Support\Facades\Route;
@@ -17,9 +18,10 @@ Route::prefix('v1')->group(function () {
     require __DIR__.'/api/conversions.php';
     require __DIR__.'/api/payment.php';
     require __DIR__.'/api/agences.php';
+    require __DIR__.'/api/depots.php';
+
+    
 });
 
 
-
-    
- 
+  

@@ -13,7 +13,7 @@ class MeController extends Controller
 
     /**
      * Retourne le profil de l'utilisateur authentifié via Sanctum (Bearer).
-     */
+     */ 
     public function __invoke(Request $request): JsonResponse
     {
         // Résolu par le middleware 'auth:sanctum'
