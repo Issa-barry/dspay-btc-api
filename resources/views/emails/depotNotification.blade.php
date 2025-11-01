@@ -49,20 +49,30 @@
                   </td>
                 </tr>
 
+                 <!-- Montant payé -->
+                <tr>
+                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">
+                    Total payé
+                  </td>
+                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;text-align:right;">
+                    {{ number_format((float)$depot->montant_envoye, 2, ',', ' ') }} €
+                  </td>
+                </tr>
+
                 <!-- Montant déposé -->
                 <tr>
                   <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">
                     Montant déposé
                   </td>
                   <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;text-align:right;">
-                    {{ number_format((float)$depot->amount, 2, ',', ' ') }} GNF
+                   {{ number_format((float)$depot->amount, 0, ',', ' ') }} GNF
                   </td>
                 </tr>
 
                 <!-- Service -->
                 <tr>
                   <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">
-                    eWallet
+                    Reçu sur le compte
                   </td>
                   <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:600;color:#1f2937;text-align:right;">
                     {{ ucfirst($depot->serviceId) }}
@@ -79,15 +89,7 @@
                   </td>
                 </tr>
 
-                {{--  <!-- Compte crédité -->
-                <tr>
-                  <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">
-                    Compte crédité
-                  </td>
-                  <td style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#1f2937;text-align:right;">
-                    {{ $depot->accountId }}
-                  </td>
-                </tr>  --}}
+                
 
                 <!-- Référence du dépôt -->
                 <tr>

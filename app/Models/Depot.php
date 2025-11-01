@@ -12,37 +12,30 @@ class Depot extends Model
     protected $fillable = [
         'user_id',
         'serviceId',
+        'montant_envoye',
         'amount',
         'recipientTel',
-        'accountId',
         'customerPhoneNumber',
         'status',
         'transaction_ref',
     ];
 
-     public function user()
+    public function user()
     {
         return $this->belongsTo(User::class);
     }
-    
-    /**
-     * Génère automatiquement la référence du dépôt.
-     */
+
     protected static function boot()
     {
         parent::boot();
 
         static::creating(function ($depot) {
-            $today = now()->format('Ymd'); // ex: 20251101
-
-            // Compte combien de dépôts ont été faits aujourd’hui
-            $countToday = self::whereDate('created_at', now()->toDateString())->count() + 1;
-
-            // Formate avec 4 chiffres (0001, 0002, ...)
-            $increment = str_pad($countToday, 4, '0', STR_PAD_LEFT);
-
-            // Génère la référence complète
-            $depot->transaction_ref = "DSP-{$today}-{$increment}";
+            if (empty($depot->transaction_ref)) {
+                $today = now()->format('Ymd');
+                $countToday = self::whereDate('created_at', now()->toDateString())->count() + 1;
+                $increment = str_pad($countToday, 4, '0', STR_PAD_LEFT);
+                $depot->transaction_ref = "DSP-{$today}-{$increment}";
+            }
         });
     }
 }

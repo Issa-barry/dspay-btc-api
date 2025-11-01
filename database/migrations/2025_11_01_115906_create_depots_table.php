@@ -12,15 +12,30 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('depots', function (Blueprint $table) {
-            $table->id();
-             $table->foreignId('user_id')->constrained()->onDelete('cascade'); // 🔗 lien vers l'utilisateur
+             $table->id();
+
+            //  Lien avec l'utilisateur
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+
+            //  Données principales du dépôt
             $table->string('serviceId'); // ex: "orange-money", "momo", etc.
-            $table->decimal('amount', 15, 2);
-            $table->string('recipientTel'); // numéro du bénéficiaire
-            $table->string('accountId'); // identifiant du compte ou wallet à créditer
-            $table->string('customerPhoneNumber'); // numéro du client qui dépose
-            $table->enum('status', ['pending', 'success', 'failed'])->default('pending'); // enum pour le statut
-            $table->string('transaction_ref')->unique(); // référence unique du dépôt
+
+            //  Nouveau champ : montant envoyé en euros (avec décimales)
+            $table->decimal('montant_envoye', 15, 2); // ex: 50.00 €
+
+            //  Montant reçu (en GNF) → entier, pas de décimales
+            $table->unsignedBigInteger('amount'); // ex: 475000 GNF
+
+            //  Informations sur le bénéficiaire et le client
+            $table->string('recipientTel');
+             $table->string('customerPhoneNumber');
+
+            //  Statut de l'opération
+            $table->enum('status', ['pending', 'success', 'failed'])->default('pending');
+
+            //  Référence unique DSP-YYYYMMDD-000X
+            $table->string('transaction_ref')->unique();
+
             $table->timestamps();
         });
     }
