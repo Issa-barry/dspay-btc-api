@@ -36,7 +36,7 @@ return new class extends Migration
             $table->enum('statut', ['envoyé', 'retiré', 'annulé', 'bloqué'])->default('envoyé');
 
             // Ajoute le mode d’envoi avec une valeur par défaut
-            $table->enum('mode_reception', ['orange_money', 'ks_pay', 'paycard', 'soutrat_money', 'kulu', 'momo'])->default('orange_money');
+            $table->enum('serviceId', ['orange_money', 'ks_pay', 'paycard', 'soutrat_money', 'kulu', 'momo'])->default('orange_money');
 
             $table->timestamps();
         });

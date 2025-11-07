@@ -9,7 +9,7 @@ class Transfert extends Model
 {
     use HasFactory;
 
-    private const CODE_PREFIX = 'DSP-'; // ← Tous les codes commencent par DSP
+    private const CODE_PREFIX = 'DSP-';
 
     // --- Statuts possibles ---
     public const STATUT_ENVOYE = 'envoyé';
@@ -24,21 +24,21 @@ class Transfert extends Model
         self::STATUT_BLOQUE,
     ];
 
-  // --- Modes de réception (mis à jour) ---
-    public const MODE_ORANGE_MONEY = 'orange_money';
-    public const MODE_KS_PAY = 'ks_pay';
-    public const MODE_PAYCARD = 'paycard';
-    public const MODE_SOUTRAT_MONEY = 'soutrat_money';
-    public const MODE_KULU = 'kulu';
-    public const MODE_MOMO = 'momo';
+    // --- Services de réception (renommé de MODES_RECEPTION) ---
+    public const SERVICE_ORANGE_MONEY = 'orange_money';
+    public const SERVICE_KS_PAY = 'ks_pay';
+    public const SERVICE_PAYCARD = 'paycard';
+    public const SERVICE_SOUTRAT_MONEY = 'soutrat_money';
+    public const SERVICE_KULU = 'kulu';
+    public const SERVICE_MOMO = 'momo';
 
-     public const MODES_RECEPTION = [
-        self::MODE_ORANGE_MONEY,
-        self::MODE_KS_PAY,
-        self::MODE_PAYCARD,
-        self::MODE_SOUTRAT_MONEY,
-        self::MODE_KULU,
-        self::MODE_MOMO,
+    public const SERVICES = [
+        self::SERVICE_ORANGE_MONEY,
+        self::SERVICE_KS_PAY,
+        self::SERVICE_PAYCARD,
+        self::SERVICE_SOUTRAT_MONEY,
+        self::SERVICE_KULU,
+        self::SERVICE_MOMO,
     ];
 
     protected $fillable = [
@@ -47,15 +47,15 @@ class Transfert extends Model
         'devise_source_id',
         'devise_cible_id',
         'taux_echange_id',
-        'taux_applique',      // ENTIER (ex: 10700)
-        'montant_envoie',     // DECIMAL(15,2)
-        'frais',              // DECIMAL(10,2) — frais en €
-        'total_ttc',          // DECIMAL(12,2) — montant_envoie + frais
-        'montant_gnf',        // ENTIER — montant reçu
-        'total_gnf',          // ENTIER — = montant_gnf (pas de frais en GNF)
+        'taux_applique',
+        'montant_envoie',
+        'frais',
+        'total_ttc',
+        'montant_gnf',
+        'total_gnf',
         'code',
         'statut',
-        'mode_reception',
+        'serviceId', // ← Renommé
     ];
 
     protected $casts = [
@@ -88,9 +88,9 @@ class Transfert extends Model
     public function tauxEchange()  { return $this->belongsTo(TauxEchange::class, 'taux_echange_id'); }
 
     /* ============== Scopes ==============*/
-    public function scopeMode($query, string $mode)
+    public function scopeService($query, string $service)
     {
-        return $query->where('mode_reception', $mode);
+        return $query->where('serviceId', $service);
     }
 
     public function scopeStatut($query, string $statut)
@@ -99,25 +99,22 @@ class Transfert extends Model
     }
 
     /* ============= Helpers =============*/
-    /** Conversion EUR->GNF avec taux entier, arrondi entier. */
     public function calculerMontantConverti(): int
     {
         return (int) round(((float) $this->montant_envoie) * ((int) $this->taux_applique), 0, PHP_ROUND_HALF_UP);
     }
 
-    /** Génère un code unique au format DSP + 2 lettres + 4 chiffres (ex: DSPAB1234) */
     public static function generateUniqueCode(): string
     {
         do {
-            $letters = self::randomLetters(2);          // AB
-            $digits  = random_int(1000, 9999);          // 1234
-            $code    = self::CODE_PREFIX . $letters . $digits; // DSPAB1234
+            $letters = self::randomLetters(2);
+            $digits  = random_int(1000, 9999);
+            $code    = self::CODE_PREFIX . $letters . $digits;
         } while (self::where('code', $code)->exists());
 
         return $code;
     }
 
-    /** Lettres uniquement (sans I/O confus) */
     private static function randomLetters(int $length): string
     {
         $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -131,16 +128,14 @@ class Transfert extends Model
     protected static function booted()
     {
         static::creating(function (Transfert $t) {
-            // Code toujours présent et bien préfixé
             if (empty($t->code) || !str_starts_with($t->code, self::CODE_PREFIX)) {
                 $t->code = self::generateUniqueCode();
             }
 
-            $t->devise_source_id ??= 1; // EUR
-            $t->devise_cible_id  ??= 2; // GNF
-            $t->mode_reception   ??= self::MODE_ORANGE_MONEY;
+            $t->devise_source_id ??= 1;
+            $t->devise_cible_id  ??= 2;
+            $t->serviceId ??= self::SERVICE_ORANGE_MONEY; // ← Renommé
 
-            // Snapshot du taux ENTIER si fourni via relation ou ID
             if ((!$t->taux_applique && $t->relationLoaded('tauxEchange')) || $t->taux_echange_id) {
                 $taux = $t->tauxEchange()->value('taux');
                 if ($taux !== null) {

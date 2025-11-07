@@ -33,43 +33,34 @@ class TransfertEnvoieController extends Controller
         }
 
         try {
-            // 1) Taux ENTIER (ex: 10700)
             $tauxEchange = TauxEchange::findOrFail($request->taux_echange_id);
             $taux = (int) $tauxEchange->taux;
 
-            // 2) Montant saisi en €
             $montantEuro = (float) $request->montant_envoie;
-
-            // 3) Frais en € (jamais convertis)
             $fraisEuro  = $this->calculerFraisEuro($montantEuro);
             $totalEuro  = round($montantEuro + $fraisEuro, 2, PHP_ROUND_HALF_UP);
 
-            // 4) Conversion du principal en GNF (les frais ne sont pas convertis)
             $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
-            $totalGnf   = $montantGnf; // pas de frais en GNF
+            $totalGnf   = $montantGnf;
 
-            // 5) Persistance
             $transfert = Transfert::create([
                 'user_id'          => $userId,
                 'beneficiaire_id'  => (int) $request->beneficiaire_id,
-                'devise_source_id' => 1, // EUR
-                'devise_cible_id'  => 2, // GNF
+                'devise_source_id' => 1,
+                'devise_cible_id'  => 2,
                 'taux_echange_id'  => $tauxEchange->id,
-                'taux_applique'    => $taux,          // ENTIER
-                'montant_envoie'   => $montantEuro,   // DECIMAL
-                'frais'            => $fraisEuro,     // DECIMAL
-                'total_ttc'        => $totalEuro,     // DECIMAL
-                'montant_gnf'      => $montantGnf,    // ENTIER
-                'total_gnf'        => $totalGnf,      // ENTIER
+                'taux_applique'    => $taux,
+                'montant_envoie'   => $montantEuro,
+                'frais'            => $fraisEuro,
+                'total_ttc'        => $totalEuro,
+                'montant_gnf'      => $montantGnf,
+                'total_gnf'        => $totalGnf,
                 'statut'           => Transfert::STATUT_ENVOYE,
-                'mode_reception'   => $request->input('mode_reception', Transfert::MODE_ORANGE_MONEY),
+                'serviceId'        => $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY), // ← Renommé
                 'code'             => Transfert::generateUniqueCode(),
             ]);
 
-            // 6) Facture (en €)
             $this->createFacture($transfert);
-
-            // 7) Email (optionnel)
             $this->envoyerEmailConfirmation($transfert);
 
             return $this->responseJson(true, 'Transfert effectué avec succès.', $transfert->fresh(), 201);
@@ -88,7 +79,7 @@ class TransfertEnvoieController extends Controller
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
             'montant_envoie'  => ['required', 'numeric', 'min:1', 'max:10000'],
-            'mode_reception'  => ['nullable', 'in:'.implode(',', Transfert::MODES_RECEPTION)],
+            'serviceId'       => ['nullable', 'in:'.implode(',', Transfert::SERVICES)], // ← Renommé
         ]);
     }
 
@@ -104,7 +95,7 @@ class TransfertEnvoieController extends Controller
         if (!$frais) return 0.0;
 
         if ($frais->type === 'pourcentage') {
-            $pourcent = (float) $frais->valeur; // ex: 5 => 5%
+            $pourcent = (float) $frais->valeur;
             return round($montantEuro * ($pourcent / 100.0), 2, PHP_ROUND_HALF_UP);
         }
 
@@ -122,8 +113,8 @@ class TransfertEnvoieController extends Controller
             'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
             'phone_societe'   => 'Numéro de téléphone de la société',
             'email_societe'   => 'contact@societe.com',
-            'total'           => $t->total_ttc,  // facture en €
-            'montant_du'      => $t->total_ttc,  // facture en €
+            'total'           => $t->total_ttc,
+            'montant_du'      => $t->total_ttc,
         ]);
     }
 
