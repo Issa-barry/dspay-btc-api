@@ -15,7 +15,9 @@ class Depot extends Model
         'montant_envoye',
         'amount',
         'recipientTel',
+        'accountId',
         'customerPhoneNumber',
+        'fieldName',
         'status',
         'transaction_ref',
     ];

@@ -5,10 +5,9 @@ namespace App\Http\Controllers\Depot;
 use App\Http\Controllers\Controller;
 use App\Models\Depot;
 use Illuminate\Http\Request;
-use App\Mail\DepotNotification;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
+use App\Mail\DepotNotification;
 use App\Traits\JsonResponseTrait;
 use Exception;
 
@@ -19,13 +18,14 @@ class DepotController extends Controller
     public function store(Request $request)
     {
         try {
-            // ✅ Validation (sans accountId)
             $validated = $request->validate([
                 'serviceId'           => 'required|string',
                 'montant_envoye'      => 'required|numeric|min:0.01',
                 'amount'              => 'required|integer|min:1',
-                'recipientTel'        => 'required|string',
+                'recipientTel'        => 'nullable|string',
                 'customerPhoneNumber' => 'required|string',
+                'fieldName'           => 'required|string',
+                'accountId'           => 'nullable|string',
             ]);
 
             $user = $request->user();
@@ -44,8 +44,9 @@ class DepotController extends Controller
 
                 $next = 1;
                 if ($lastToday && preg_match('/DSP-\d{8}-(\d{4})$/', $lastToday->transaction_ref, $m)) {
-                    $next = (int)$m[1] + 1;
+                    $next = (int) $m[1] + 1;
                 }
+
                 $increment = str_pad($next, 4, '0', STR_PAD_LEFT);
                 $transactionRef = "DSP-{$todayYmd}-{$increment}";
 
@@ -54,17 +55,17 @@ class DepotController extends Controller
                     'serviceId'           => $validated['serviceId'],
                     'montant_envoye'      => $validated['montant_envoye'],
                     'amount'              => $validated['amount'],
-                    'recipientTel'        => $validated['recipientTel'],
+                    'recipientTel'        => $validated['recipientTel'] ?? null,
                     'customerPhoneNumber' => $validated['customerPhoneNumber'],
+                    'fieldName'           => $validated['fieldName'],
+                    'accountId'           => $validated['accountId'] ?? null,
                     'status'              => 'pending',
                     'transaction_ref'     => $transactionRef,
                 ]);
             });
 
-            // ✅ Simulation succès
             $depot->update(['status' => 'success']);
 
-            // ✅ Envoi d’email
             try {
                 Mail::to($user->email)->send(new DepotNotification($depot->fresh()));
             } catch (Exception $e) {
@@ -75,7 +76,6 @@ class DepotController extends Controller
 
         } catch (\Illuminate\Validation\ValidationException $e) {
             return $this->responseJson(false, 'Erreur de validation', $e->errors(), 422);
-
         } catch (Exception $e) {
             \Log::error('Erreur dans DepotController@store : ' . $e->getMessage());
             return $this->responseJson(false, 'Une erreur interne est survenue.', null, 500);

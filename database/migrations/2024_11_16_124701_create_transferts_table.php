@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+return new class extends Migration 
 {
     public function up(): void
     {
@@ -36,7 +36,7 @@ return new class extends Migration
             $table->enum('statut', ['envoyé', 'retiré', 'annulé', 'bloqué'])->default('envoyé');
 
             // Ajoute le mode d’envoi avec une valeur par défaut
-            $table->enum('mode_reception', ['orange_money', 'ewallet', 'retrait_cash'])->default('retrait_cash');
+            $table->enum('mode_reception', ['orange_money', 'ks_pay', 'paycard', 'soutrat_money', 'kulu', 'momo'])->default('orange_money');
 
             $table->timestamps();
         });

@@ -14,11 +14,13 @@ return [
      |
      */
 
-    'enabled' => env('DEBUGBAR_ENABLED', null),
+    'enabled' => env('DEBUGBAR_ENABLED', env('APP_DEBUG', false)),
     'hide_empty_tabs' => false, // Hide tabs until they have content
     'except' => [
         'telescope*',
         'horizon*',
+        'api/payments/stripe/webhook',
+        'api/payments/*/webhook',
     ],
 
     /*
