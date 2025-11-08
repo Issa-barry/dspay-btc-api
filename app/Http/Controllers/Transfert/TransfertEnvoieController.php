@@ -33,34 +33,46 @@ class TransfertEnvoieController extends Controller
         }
 
         try {
+            // 1) Taux ENTIER (ex: 10700)
             $tauxEchange = TauxEchange::findOrFail($request->taux_echange_id);
             $taux = (int) $tauxEchange->taux;
 
+            // 2) Montant saisi en €
             $montantEuro = (float) $request->montant_envoie;
+
+            // 3) Frais en € (jamais convertis)
             $fraisEuro  = $this->calculerFraisEuro($montantEuro);
             $totalEuro  = round($montantEuro + $fraisEuro, 2, PHP_ROUND_HALF_UP);
 
+            // 4) Conversion du principal en GNF (les frais ne sont pas convertis)
             $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
-            $totalGnf   = $montantGnf;
+            $totalGnf   = $montantGnf; // pas de frais en GNF
 
+            // 5) Persistance
             $transfert = Transfert::create([
-                'user_id'          => $userId,
-                'beneficiaire_id'  => (int) $request->beneficiaire_id,
-                'devise_source_id' => 1,
-                'devise_cible_id'  => 2,
-                'taux_echange_id'  => $tauxEchange->id,
-                'taux_applique'    => $taux,
-                'montant_envoie'   => $montantEuro,
-                'frais'            => $fraisEuro,
-                'total_ttc'        => $totalEuro,
-                'montant_gnf'      => $montantGnf,
-                'total_gnf'        => $totalGnf,
-                'statut'           => Transfert::STATUT_ENVOYE,
-                'serviceId'        => $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY), // ← Renommé
-                'code'             => Transfert::generateUniqueCode(),
+                'user_id'             => $userId,
+                'beneficiaire_id'     => (int) $request->beneficiaire_id,
+                'devise_source_id'    => 1, // EUR
+                'devise_cible_id'     => 2, // GNF
+                'taux_echange_id'     => $tauxEchange->id,
+                'taux_applique'       => $taux,
+                'montant_envoie'      => $montantEuro,
+                'frais'               => $fraisEuro,
+                'total_ttc'           => $totalEuro,
+                'amount'              => $montantGnf,
+                'total_gnf'           => $totalGnf,
+                'statut'              => Transfert::STATUT_ENVOYE,
+                'serviceId'           => $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY),
+                'recipientTel'        => $request->input('recipientTel'),        // ← Nouveau
+                'accountId'           => $request->input('accountId'),           // ← Nouveau
+                'customerPhoneNumber' => $request->input('customerPhoneNumber'), // ← Nouveau
+                'code'                => Transfert::generateUniqueCode(),
             ]);
 
+            // 6) Facture (en €)
             $this->createFacture($transfert);
+
+            // 7) Email (optionnel)
             $this->envoyerEmailConfirmation($transfert);
 
             return $this->responseJson(true, 'Transfert effectué avec succès.', $transfert->fresh(), 201);
@@ -75,12 +87,49 @@ class TransfertEnvoieController extends Controller
 
     private function validateRequest(Request $request)
     {
-        return Validator::make($request->all(), [
+        $serviceId = $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY);
+        
+        // Règles de base
+        $rules = [
             'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
             'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
             'montant_envoie'  => ['required', 'numeric', 'min:1', 'max:10000'],
-            'serviceId'       => ['nullable', 'in:'.implode(',', Transfert::SERVICES)], // ← Renommé
-        ]);
+            'serviceId'       => ['nullable', 'in:'.implode(',', Transfert::SERVICES)],
+        ];
+
+        // Validation conditionnelle selon le type de service
+        if (in_array($serviceId, Transfert::SERVICES_TEL)) {
+            // Service utilisant le téléphone (Orange Money, MTN, etc.)
+            $rules['recipientTel'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['accountId'] = ['nullable']; // Non utilisé mais autorisé
+            $rules['customerPhoneNumber'] = ['nullable']; // Non requis pour ce type
+            
+        } elseif (in_array($serviceId, Transfert::SERVICES_ACCOUNT)) {
+            // Service utilisant un numéro de compte (KS Pay, Paycard, etc.)
+            $rules['accountId'] = ['required', 'string', 'max:50'];
+            $rules['customerPhoneNumber'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['recipientTel'] = ['nullable']; // Non utilisé mais autorisé
+            
+        } else {
+            // Par défaut, au moins l'un des deux doit être fourni
+            $rules['recipientTel'] = ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['accountId'] = ['nullable', 'string', 'max:50'];
+            $rules['customerPhoneNumber'] = ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        // Validation supplémentaire : au moins recipientTel OU accountId doit être fourni
+        $validator->after(function ($validator) use ($request) {
+            if (empty($request->recipientTel) && empty($request->accountId)) {
+                $validator->errors()->add(
+                    'recipientTel', 
+                    'Vous devez fournir soit un numéro de téléphone (recipientTel) soit un numéro de compte (accountId).'
+                );
+            }
+        });
+
+        return $validator;
     }
 
     private function calculerFraisEuro(float $montantEuro): float

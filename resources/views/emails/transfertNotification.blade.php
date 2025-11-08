@@ -83,7 +83,7 @@
                 <tr>
                   <td width="220" style="padding:12px 20px;border-top:1px dashed #e5e7eb;color:#6b7280;">Montant reçu</td>
                   <td align="right" style="padding:12px 20px;border-top:1px dashed #e5e7eb;font-weight:700;font-size:18px;color:#1f2937;">
-                    {{ number_format((float)$transfert->montant_gnf, 0, ',', ' ') }} {{ $devDst }}
+                    {{ number_format((float)$transfert->amount, 0, ',', ' ') }} {{ $devDst }}
                   </td>
                 </tr>
                 

@@ -24,7 +24,7 @@ class Transfert extends Model
         self::STATUT_BLOQUE,
     ];
 
-    // --- Services de réception (renommé de MODES_RECEPTION) ---
+    // --- Services de réception ---
     public const SERVICE_ORANGE_MONEY = 'orange_money';
     public const SERVICE_KS_PAY = 'ks_pay';
     public const SERVICE_PAYCARD = 'paycard';
@@ -41,6 +41,21 @@ class Transfert extends Model
         self::SERVICE_MOMO,
     ];
 
+    // --- Services utilisant recipientTel (téléphone) ---
+    public const SERVICES_TEL = [
+        self::SERVICE_ORANGE_MONEY,
+        self::SERVICE_MOMO,
+        // Ajoutez ici les autres services mobile money
+    ];
+
+    // --- Services utilisant accountId (numéro de compte) ---
+    public const SERVICES_ACCOUNT = [
+        self::SERVICE_KS_PAY,
+        self::SERVICE_PAYCARD,
+        self::SERVICE_SOUTRAT_MONEY,
+        self::SERVICE_KULU,
+    ];
+
     protected $fillable = [
         'user_id',
         'beneficiaire_id',
@@ -51,11 +66,14 @@ class Transfert extends Model
         'montant_envoie',
         'frais',
         'total_ttc',
-        'montant_gnf',
+        'amount',
         'total_gnf',
         'code',
         'statut',
-        'serviceId', // ← Renommé
+        'serviceId',
+        'recipientTel',        // ← Nouveau
+        'accountId',           // ← Nouveau
+        'customerPhoneNumber', // ← Nouveau
     ];
 
     protected $casts = [
@@ -63,16 +81,16 @@ class Transfert extends Model
         'frais'          => 'decimal:2',
         'total_ttc'      => 'decimal:2',
         'taux_applique'  => 'integer',
-        'montant_gnf'    => 'integer',
+        'amount'         => 'integer',
         'total_gnf'      => 'integer',
     ];
 
     /* =======================
      |  Mutateurs (GNF = int)
      =======================*/
-    public function setMontantGnfAttribute($value): void
+    public function setAmountAttribute($value): void
     {
-        $this->attributes['montant_gnf'] = (int) round((float) $value, 0, PHP_ROUND_HALF_UP);
+        $this->attributes['amount'] = (int) round((float) $value, 0, PHP_ROUND_HALF_UP);
     }
 
     public function setTotalGnfAttribute($value): void
@@ -99,11 +117,25 @@ class Transfert extends Model
     }
 
     /* ============= Helpers =============*/
+    /** Conversion EUR->GNF avec taux entier, arrondi entier. */
     public function calculerMontantConverti(): int
     {
         return (int) round(((float) $this->montant_envoie) * ((int) $this->taux_applique), 0, PHP_ROUND_HALF_UP);
     }
 
+    /** Vérifie si le service utilise recipientTel */
+    public function serviceUtiliseTel(): bool
+    {
+        return in_array($this->serviceId, self::SERVICES_TEL);
+    }
+
+    /** Vérifie si le service utilise accountId */
+    public function serviceUtiliseAccount(): bool
+    {
+        return in_array($this->serviceId, self::SERVICES_ACCOUNT);
+    }
+
+    /** Génère un code unique au format DSP + 2 lettres + 4 chiffres (ex: DSPAB1234) */
     public static function generateUniqueCode(): string
     {
         do {
@@ -115,6 +147,7 @@ class Transfert extends Model
         return $code;
     }
 
+    /** Lettres uniquement (sans I/O confus) */
     private static function randomLetters(int $length): string
     {
         $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -134,7 +167,7 @@ class Transfert extends Model
 
             $t->devise_source_id ??= 1;
             $t->devise_cible_id  ??= 2;
-            $t->serviceId ??= self::SERVICE_ORANGE_MONEY; // ← Renommé
+            $t->serviceId ??= self::SERVICE_ORANGE_MONEY;
 
             if ((!$t->taux_applique && $t->relationLoaded('tauxEchange')) || $t->taux_echange_id) {
                 $taux = $t->tauxEchange()->value('taux');
