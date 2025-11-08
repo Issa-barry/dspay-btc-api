@@ -217,14 +217,18 @@ class WebhookController extends Controller
     }
 
     /**
-     * Finalisation métier. Retourne true si un transfert a été créé (ou déjà présent).
-     * 
-     * 🎯 NOUVELLE VERSION : Appelle le contrôleur TransfertEnvoieController
+     * Finalisation métier avec les NOUVEAUX CHAMPS.
+     * 🎯 Appelle le contrôleur TransfertEnvoieController
      */
     protected function finalizeAfterSuccess(PaymentEnLigne $pel): bool
     {
         $meta = is_array($pel->metadata) ? $pel->metadata : [];
         if (!empty($pel->processed_at) || !empty($meta['transfert_id'])) {
+            Log::info('Finalize skipped: already processed', [
+                'payment_en_ligne_id' => $pel->id,
+                'processed_at' => $pel->processed_at,
+                'transfert_id' => $meta['transfert_id'] ?? null,
+            ]);
             return true; // déjà traité
         }
 
@@ -240,11 +244,23 @@ class WebhookController extends Controller
                 return;
             }
 
+            // ⭐ Extraction des metadata avec les NOUVEAUX champs
             $beneficiaireId = isset($lockedMeta['beneficiaire_id']) ? (int) $lockedMeta['beneficiaire_id'] : null;
             $tauxId         = isset($lockedMeta['taux_echange_id']) ? (int) $lockedMeta['taux_echange_id'] : null;
             $montantEuro    = isset($lockedMeta['montant_envoie']) ? (float) $lockedMeta['montant_envoie'] : null;
             $serviceId      = $lockedMeta['serviceId'] ?? Transfert::SERVICE_ORANGE_MONEY;
             $userId         = $locked->user_id ?: (isset($lockedMeta['user_id']) ? (int) $lockedMeta['user_id'] : null);
+
+            Log::info('Finalize: Processing payment', [
+                'payment_en_ligne_id' => $locked->id,
+                'beneficiaire_id' => $beneficiaireId,
+                'taux_id' => $tauxId,
+                'montant_euro' => $montantEuro,
+                'serviceId' => $serviceId,
+                'user_id' => $userId,
+                'recipientTel' => $lockedMeta['recipientTel'] ?? null,
+                'accountId' => $lockedMeta['accountId'] ?? null,
+            ]);
 
             if (!$beneficiaireId || !$tauxId || $montantEuro === null) {
                 Log::warning('Finalize skipped: missing required metadata', [
@@ -254,9 +270,8 @@ class WebhookController extends Controller
                 return;
             }
 
-            // ⭐ Préparer la requête simulée pour le contrôleur TransfertEnvoieController
-            $fakeRequest = new \Illuminate\Http\Request();
-            $fakeRequest->merge([
+            // ⭐ Préparer la requête simulée pour TransfertEnvoieController
+            $fakeRequest = Request::create('/api/transferts', 'POST', [
                 'beneficiaire_id' => $beneficiaireId,
                 'taux_echange_id' => $tauxId,
                 'montant_envoie'  => $montantEuro,
@@ -271,16 +286,43 @@ class WebhookController extends Controller
                 $user = \App\Models\User::find($userId);
                 if ($user) {
                     $fakeRequest->setUserResolver(fn() => $user);
+                    \Illuminate\Support\Facades\Auth::setUser($user);
+                    
+                    Log::info('User authenticated for webhook transfer', [
+                        'user_id' => $userId,
+                        'user_email' => $user->email,
+                    ]);
+                } else {
+                    Log::error('User not found', [
+                        'user_id' => $userId,
+                    ]);
+                    return;
                 }
+            } else {
+                Log::error('No user_id in payment metadata', [
+                    'payment_en_ligne_id' => $locked->id,
+                ]);
+                return;
             }
 
             // ⭐ Appeler le contrôleur TransfertEnvoieController
             try {
                 $controller = app(\App\Http\Controllers\Transfert\TransfertEnvoieController::class);
+                
+                Log::info('Calling TransfertEnvoieController from webhook', [
+                    'data' => $fakeRequest->all(),
+                    'user_id' => $userId,
+                ]);
+                
                 $response = $controller->store($fakeRequest);
 
                 // Vérifier la réponse
                 $responseData = json_decode($response->getContent(), true);
+                
+                Log::info('TransfertEnvoieController response', [
+                    'status_code' => $response->getStatusCode(),
+                    'response_data' => $responseData,
+                ]);
                 
                 if (isset($responseData['success']) && $responseData['success'] === true) {
                     $transfertData = $responseData['data'] ?? null;
@@ -293,10 +335,11 @@ class WebhookController extends Controller
                         
                         $created = true;
                         
-                        Log::info('Transfert créé depuis webhook via contrôleur', [
+                        Log::info('✅ Transfert créé depuis webhook via contrôleur', [
                             'transfert_id' => $transfertData['id'],
                             'payment_en_ligne_id' => $locked->id,
                             'code' => $transfertData['code'] ?? null,
+                            'serviceId' => $transfertData['serviceId'] ?? null,
                         ]);
                     } else {
                         Log::error('Transfert créé mais ID manquant dans la réponse', [
@@ -304,14 +347,16 @@ class WebhookController extends Controller
                         ]);
                     }
                 } else {
-                    Log::error('Échec création transfert depuis webhook', [
+                    Log::error('❌ Échec création transfert depuis webhook', [
                         'response' => $responseData,
                         'payment_en_ligne_id' => $locked->id,
                     ]);
                 }
             } catch (\Throwable $e) {
-                Log::error('Exception lors de l\'appel du contrôleur TransfertEnvoieController', [
+                Log::error('💥 Exception lors de l\'appel du contrôleur TransfertEnvoieController', [
                     'message' => $e->getMessage(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
                     'trace' => $e->getTraceAsString(),
                     'payment_en_ligne_id' => $locked->id,
                 ]);
@@ -338,7 +383,6 @@ class WebhookController extends Controller
         if (!$target->processed_at && $source->processed_at) $target->processed_at = $source->processed_at;
 
         $target->save();
-        // $source->delete(); // si tu souhaites nettoyer
     }
 
     private function toArraySafe($meta): array
