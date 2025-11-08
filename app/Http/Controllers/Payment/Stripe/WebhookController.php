@@ -6,16 +6,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
 use Symfony\Component\HttpFoundation\Response;
 use App\Traits\JsonResponseTrait;
 
 use App\Models\PaymentEnLigne;
 use App\Models\Transfert;
-use App\Models\TauxEchange;
-use App\Models\Frais;
-use App\Models\Facture;
-use App\Mail\TransfertNotification;
 
 class WebhookController extends Controller
 {
@@ -54,7 +49,7 @@ class WebhookController extends Controller
                         $pel->payment_intent_id = (string) $cs->payment_intent;
                     }
 
-                    // Fusion d’un éventuel “twin” (ligne créée par PI)
+                    // Fusion d'un éventuel "twin" (ligne créée par PI)
                     if (!empty($cs->payment_intent)) {
                         $twin = PaymentEnLigne::where('payment_intent_id', (string) $cs->payment_intent)
                             ->where('id', '!=', $pel->id)->first();
@@ -223,6 +218,8 @@ class WebhookController extends Controller
 
     /**
      * Finalisation métier. Retourne true si un transfert a été créé (ou déjà présent).
+     * 
+     * 🎯 NOUVELLE VERSION : Appelle le contrôleur TransfertEnvoieController
      */
     protected function finalizeAfterSuccess(PaymentEnLigne $pel): bool
     {
@@ -246,12 +243,8 @@ class WebhookController extends Controller
             $beneficiaireId = isset($lockedMeta['beneficiaire_id']) ? (int) $lockedMeta['beneficiaire_id'] : null;
             $tauxId         = isset($lockedMeta['taux_echange_id']) ? (int) $lockedMeta['taux_echange_id'] : null;
             $montantEuro    = isset($lockedMeta['montant_envoie']) ? (float) $lockedMeta['montant_envoie'] : null;
-            $modeReception  = $lockedMeta['mode_reception'] ?? Transfert::MODE_RETRAIT_CASH;
-
+            $serviceId      = $lockedMeta['serviceId'] ?? Transfert::SERVICE_ORANGE_MONEY;
             $userId         = $locked->user_id ?: (isset($lockedMeta['user_id']) ? (int) $lockedMeta['user_id'] : null);
-            $fraisEuroMeta  = isset($lockedMeta['frais_eur']) ? (float) $lockedMeta['frais_eur'] : null;
-            $totalTtcMeta   = isset($lockedMeta['total_ttc']) ? (float) $lockedMeta['total_ttc'] : null;
-            $customerEmail  = $lockedMeta['customer_email'] ?? null;
 
             if (!$beneficiaireId || !$tauxId || $montantEuro === null) {
                 Log::warning('Finalize skipped: missing required metadata', [
@@ -261,65 +254,68 @@ class WebhookController extends Controller
                 return;
             }
 
-            // Fallback : metadata.taux_applique -> DB
-            $taux = (int) ($lockedMeta['taux_applique'] ?? 0);
-            if ($taux <= 0) {
-                $taux = (int) optional(TauxEchange::find($tauxId))->taux;
-            }
-            if ($taux <= 0) {
-                Log::warning('Finalize skipped: invalid taux', ['taux_id' => $tauxId, 'taux' => $taux]);
-                return;
-            }
-
-            $fraisEuro = $fraisEuroMeta ?? $this->calculerFraisEuro($montantEuro);
-            $totalEuro = $totalTtcMeta ?? round($montantEuro + $fraisEuro, 2, PHP_ROUND_HALF_UP);
-
-            $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
-            $totalGnf   = $montantGnf;
-
-            $transfert = Transfert::create([
-                'user_id'          => $userId,
-                'beneficiaire_id'  => $beneficiaireId,
-                'devise_source_id' => 1,
-                'devise_cible_id'  => 2,
-                'taux_echange_id'  => $tauxId,
-                'taux_applique'    => $taux,
-                'montant_envoie'   => $montantEuro,
-                'frais'            => $fraisEuro,
-                'total_ttc'        => $totalEuro,
-                'montant_gnf'      => $montantGnf,
-                'total_gnf'        => $totalGnf,
-                'statut'           => Transfert::STATUT_ENVOYE,
-                'mode_reception'   => $modeReception,
+            // ⭐ Préparer la requête simulée pour le contrôleur TransfertEnvoieController
+            $fakeRequest = new \Illuminate\Http\Request();
+            $fakeRequest->merge([
+                'beneficiaire_id' => $beneficiaireId,
+                'taux_echange_id' => $tauxId,
+                'montant_envoie'  => $montantEuro,
+                'serviceId'       => $serviceId,
+                'recipientTel'    => $lockedMeta['recipientTel'] ?? null,
+                'accountId'       => $lockedMeta['accountId'] ?? null,
+                'customerPhoneNumber' => $lockedMeta['customerPhoneNumber'] ?? null,
             ]);
 
-            $facture = Facture::create([
-                'transfert_id'    => $transfert->id,
-                'type'            => 'transfert',
-                'statut'          => 'brouillon',
-                'envoye'          => false,
-                'nom_societe'     => 'FELLO',
-                'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
-                'phone_societe'   => 'Numéro de téléphone de la société',
-                'email_societe'   => 'contact@societe.com',
-                'total'           => $transfert->total_ttc,
-                'montant_du'      => $transfert->total_ttc,
-            ]);
+            // ⭐ Simuler l'utilisateur authentifié
+            if ($userId) {
+                $user = \App\Models\User::find($userId);
+                if ($user) {
+                    $fakeRequest->setUserResolver(fn() => $user);
+                }
+            }
 
+            // ⭐ Appeler le contrôleur TransfertEnvoieController
             try {
-                $to = $transfert->expediteur->email ?? $customerEmail;
-                if ($to) Mail::to($to)->send(new TransfertNotification($transfert));
+                $controller = app(\App\Http\Controllers\Transfert\TransfertEnvoieController::class);
+                $response = $controller->store($fakeRequest);
+
+                // Vérifier la réponse
+                $responseData = json_decode($response->getContent(), true);
+                
+                if (isset($responseData['success']) && $responseData['success'] === true) {
+                    $transfertData = $responseData['data'] ?? null;
+                    
+                    if ($transfertData && isset($transfertData['id'])) {
+                        // Mise à jour des metadata avec le transfert_id
+                        $lockedMeta['transfert_id'] = $transfertData['id'];
+                        $locked->metadata = $lockedMeta;
+                        $locked->save();
+                        
+                        $created = true;
+                        
+                        Log::info('Transfert créé depuis webhook via contrôleur', [
+                            'transfert_id' => $transfertData['id'],
+                            'payment_en_ligne_id' => $locked->id,
+                            'code' => $transfertData['code'] ?? null,
+                        ]);
+                    } else {
+                        Log::error('Transfert créé mais ID manquant dans la réponse', [
+                            'response' => $responseData,
+                        ]);
+                    }
+                } else {
+                    Log::error('Échec création transfert depuis webhook', [
+                        'response' => $responseData,
+                        'payment_en_ligne_id' => $locked->id,
+                    ]);
+                }
             } catch (\Throwable $e) {
-                Log::warning('Email transfert non envoyé: '.$e->getMessage());
+                Log::error('Exception lors de l\'appel du contrôleur TransfertEnvoieController', [
+                    'message' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'payment_en_ligne_id' => $locked->id,
+                ]);
             }
-
-            $lockedMeta['transfert_id'] = $transfert->id;
-            if (isset($facture->id)) $lockedMeta['facture_id'] = $facture->id;
-
-            $locked->metadata = $lockedMeta;
-            $locked->save();
-
-            $created = true;
         });
 
         return $created;
@@ -343,25 +339,6 @@ class WebhookController extends Controller
 
         $target->save();
         // $source->delete(); // si tu souhaites nettoyer
-    }
-
-    private function calculerFraisEuro(float $montantEuro): float
-    {
-        $frais = Frais::where('montant_min', '<=', $montantEuro)
-            ->where(function ($q) use ($montantEuro) {
-                $q->where('montant_max', '>=', $montantEuro)->orWhereNull('montant_max');
-            })
-            ->orderBy('montant_min', 'asc')
-            ->first();
-
-        if (!$frais) return 0.0;
-
-        if ($frais->type === 'pourcentage') {
-            $pourcent = (float) $frais->valeur;
-            return round($montantEuro * ($pourcent / 100.0), 2, PHP_ROUND_HALF_UP);
-        }
-
-        return round((float) $frais->valeur, 2, PHP_ROUND_HALF_UP);
     }
 
     private function toArraySafe($meta): array
