@@ -4,7 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+return new class extends Migration 
 {
     public function up(): void
     {
@@ -28,15 +28,21 @@ return new class extends Migration
             $table->decimal('frais', 10, 2)->default(0); // Frais en € (jamais convertis)
             $table->decimal('total_ttc', 12, 2);           // montant_envoie + frais (en €)
 
-            $table->unsignedBigInteger('montant_gnf');     // Montant reçu (GNF entier)
-            $table->unsignedBigInteger('total_gnf');       // = montant_gnf (pas de frais en GNF)
+            $table->unsignedBigInteger('amount');     // Montant reçu (GNF entier)
+            $table->unsignedBigInteger('total_gnf');       // = amount (pas de frais en GNF)
 
             // Divers
             $table->string('code', 16)->unique();
             $table->enum('statut', ['envoyé', 'retiré', 'annulé', 'bloqué'])->default('envoyé');
 
             // Ajoute le mode d’envoi avec une valeur par défaut
-            $table->enum('mode_reception', ['orange_money', 'ewallet', 'retrait_cash'])->default('retrait_cash');
+            $table->enum('serviceId', ['orange_money', 'ks_pay', 'paycard', 'soutrat_money', 'kulu', 'momo'])->default('orange_money');
+
+            // Informations de destinataire et client
+            $table->string('recipientTel', 20)->nullable();        // Numéro de téléphone du bénéficiaire (pour services mobile money)
+            $table->string('accountId', 50)->nullable();           // Numéro de compte du bénéficiaire (pour services bancaires)
+            $table->string('customerPhoneNumber', 20)->nullable(); // Numéro de téléphone du client (obligatoire si accountId est utilisé)
+
 
             $table->timestamps();
         });

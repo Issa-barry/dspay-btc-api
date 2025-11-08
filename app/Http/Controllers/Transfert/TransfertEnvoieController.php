@@ -1,252 +1,136 @@
 <?php
 
-namespace App\Http\Controllers\Payment\Stripe;
+namespace App\Http\Controllers\Transfert;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Mail;
-use Symfony\Component\HttpFoundation\Response;
-use App\Traits\JsonResponseTrait;
-
-use App\Models\PaymentEnLigne;
-use App\Models\Transfert;
-use App\Models\TauxEchange;
-use App\Models\Frais;
-use App\Models\Facture;
 use App\Mail\TransfertNotification;
+use App\Models\Facture;
+use App\Models\Frais;
+use App\Models\TauxEchange;
+use App\Models\Transfert;
+use App\Traits\JsonResponseTrait;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
+use Exception;
 
-class WebhookController extends Controller
+class TransfertEnvoieController extends Controller
 {
     use JsonResponseTrait;
 
-    public function handle(Request $request)
+    public function store(Request $request)
     {
-        $sig     = $request->header('Stripe-Signature');
-        $secret  = config('services.stripe.webhook_secret');
-        $payload = $request->getContent();
+        $userId = $request->user()?->id ?? Auth::id();
+        if (!$userId) {
+            return $this->responseJson(false, 'Non authentifié.', null, 401);
+        }
+
+        $validator = $this->validateRequest($request);
+        if ($validator->fails()) {
+            return $this->responseJson(false, 'Validation échouée.', $validator->errors(), 422);
+        }
 
         try {
-            $event = \Stripe\Webhook::constructEvent($payload, $sig, $secret);
-        } catch (\Throwable $e) {
-            Log::warning('Stripe signature invalid: '.$e->getMessage());
-            return $this->responseJson(false, 'Invalid signature', null, 400);
-        }
+            // 1) Taux ENTIER (ex: 10700)
+            $tauxEchange = TauxEchange::findOrFail($request->taux_echange_id);
+            $taux = (int) $tauxEchange->taux;
 
-        try {
-            Log::info('Stripe event received', ['type' => $event->type, 'id' => $event->id]);
+            // 2) Montant saisi en €
+            $montantEuro = (float) $request->montant_envoie;
 
-            /**
-             * 1) CHECKOUT (page hébergée)
-             */
-            if ($event->type === 'checkout.session.completed') {
-                /** @var \Stripe\Checkout\Session $cs */
-                $cs = $event->data->object;
+            // 3) Frais en € (jamais convertis)
+            $fraisEuro  = $this->calculerFraisEuro($montantEuro);
+            $totalEuro  = round($montantEuro + $fraisEuro, 2, PHP_ROUND_HALF_UP);
 
-                $pel = PaymentEnLigne::where('session_id', $cs->id)
-                    ->orWhere('provider_payment_id', $cs->id)
-                    ->first();
-
-                if ($pel) {
-                    // Id du PaymentIntent et statut
-                    if (!empty($cs->payment_intent) && empty($pel->payment_intent_id)) {
-                        $pel->payment_intent_id = (string) $cs->payment_intent;
-                    }
-                    $pel->status = $cs->payment_status === 'paid' ? 'succeeded' : (string) $cs->payment_status;
-
-                    // Fusion metadata (Stripe -> locale)
-                    $oldMeta       = is_array($pel->metadata) ? $pel->metadata : [];
-                    $metaStripe    = $this->toArraySafe($cs->metadata ?? []);
-                    $pel->metadata = array_merge($oldMeta, $metaStripe, [
-                        'customer_email' => $cs->customer_details->email ?? ($oldMeta['customer_email'] ?? null),
-                        'last_event'     => $event->type,
-                        'livemode'       => (bool) ($cs->livemode ?? false),
-                        'source'         => $oldMeta['source'] ?? 'checkout',
-                    ]);
-
-                    if ($cs->payment_status === 'paid' && empty($pel->processed_at)) {
-                        $this->finalizeAfterSuccess($pel); // ← crée Transfert + Facture + mail (idempotent)
-                        $pel->processed_at = now();
-                    }
-
-                    $pel->save();
-                } else {
-                    Log::warning('Checkout session completed but no local row found', ['session_id' => $cs->id]);
-                }
-
-                return new Response('OK', 200);
-            }
-
-            /**
-             * 2) PAYMENT INTENT (Elements & signaux complémentaires)
-             */
-            if (str_starts_with($event->type, 'payment_intent.')) {
-                /** @var \Stripe\PaymentIntent $pi */
-                $pi = $event->data->object;
-
-                $map = [
-                    'succeeded'               => 'succeeded',
-                    'processing'              => 'processing',
-                    'canceled'                => 'canceled',
-                    'requires_payment_method' => 'pending',
-                    'requires_action'         => 'pending',
-                    'requires_confirmation'   => 'pending',
-                ];
-
-                $pel = PaymentEnLigne::firstOrCreate(
-                    ['payment_intent_id' => (string) $pi->id],
-                    [
-                        'provider'            => 'stripe',
-                        'provider_payment_id' => (string) $pi->id,
-                        'status'              => 'pending',
-                    ]
-                );
-
-                $pel->amount   = (int) ($pi->amount ?? $pel->amount ?? 0);
-                $pel->currency = (string) ($pi->currency ?? $pel->currency ?? 'eur');
-                $pel->status   = $map[$pi->status] ?? 'pending';
-
-                // Metadata PI -> locale
-                $oldMeta       = is_array($pel->metadata) ? $pel->metadata : [];
-                $metaStripe    = $this->toArraySafe($pi->metadata ?? []);
-                $pel->metadata = array_merge($oldMeta, $metaStripe, [
-                    'customer_email' => $oldMeta['customer_email'] ?? null,
-                    'last_event'     => $event->type,
-                    'livemode'       => (bool) ($pi->livemode ?? false),
-                ]);
-
-                if ($pi->status === 'succeeded' && empty($pel->processed_at)) {
-                    $this->finalizeAfterSuccess($pel); // ← crée Transfert + Facture + mail (idempotent)
-                    $pel->processed_at = now();
-                }
-
-                $pel->save();
-
-                return new Response('OK', 200);
-            }
-
-            Log::info('Stripe event ignored', ['type' => $event->type]);
-            return new Response('OK', 200);
-
-        } catch (\Throwable $e) {
-            Log::error('Webhook handler error: '.$e->getMessage(), ['trace' => $e->getTraceAsString()]);
-            return new Response('OK', 200); // stop retries
-        }
-    }
-
-    /**
-     * Finalisation métier (idempotente) :
-     * - crée Transfert à partir des metadata
-     * - crée Facture
-     * - envoie email
-     * - pose metadata.transfert_id (idempotence)
-     * - processed_at est posé dans le handler
-     */
-    protected function finalizeAfterSuccess(PaymentEnLigne $pel): void
-    {
-        // Idempotence rapide
-        $meta = is_array($pel->metadata) ? $pel->metadata : [];
-        if (!empty($pel->processed_at) || !empty($meta['transfert_id'])) {
-            return;
-        }
-
-        DB::transaction(function () use ($pel) {
-            /** @var PaymentEnLigne $locked */
-            $locked = PaymentEnLigne::whereKey($pel->id)->lockForUpdate()->first();
-            $lockedMeta = is_array($locked->metadata) ? $locked->metadata : [];
-
-            if (!empty($locked->processed_at) || !empty($lockedMeta['transfert_id'])) {
-                return; // déjà traité
-            }
-
-            // Champs nécessaires
-            $beneficiaireId = isset($lockedMeta['beneficiaire_id']) ? (int) $lockedMeta['beneficiaire_id'] : null;
-            $tauxId         = isset($lockedMeta['taux_echange_id']) ? (int) $lockedMeta['taux_echange_id'] : null;
-            $montantEuro    = isset($lockedMeta['montant_envoie']) ? (float) $lockedMeta['montant_envoie'] : null;
-            $modeReception  = $lockedMeta['mode_reception'] ?? Transfert::MODE_RETRAIT_CASH;
-
-            // Optionnels
-            $userId         = $locked->user_id ?: (isset($lockedMeta['user_id']) ? (int) $lockedMeta['user_id'] : null);
-            $fraisEuroMeta  = isset($lockedMeta['frais_eur']) ? (float) $lockedMeta['frais_eur'] : null;
-            $totalTtcMeta   = isset($lockedMeta['total_ttc']) ? (float) $lockedMeta['total_ttc'] : null;
-            $customerEmail  = $lockedMeta['customer_email'] ?? null;
-
-            if (!$beneficiaireId || !$tauxId || $montantEuro === null) {
-                Log::warning('Finalize skipped: missing required metadata', [
-                    'payment_en_ligne_id' => $locked->id,
-                    'meta' => $lockedMeta,
-                ]);
-                return;
-            }
-
-            // Taux entier
-            $taux = (int) optional(TauxEchange::find($tauxId))->taux;
-            if ($taux <= 0) {
-                Log::warning('Finalize skipped: invalid taux', ['taux_id' => $tauxId, 'taux' => $taux]);
-                return;
-            }
-
-            // Frais / total (en €)
-            $fraisEuro = $fraisEuroMeta ?? $this->calculerFraisEuro($montantEuro);
-            $totalEuro = $totalTtcMeta ?? round($montantEuro + $fraisEuro, 2, PHP_ROUND_HALF_UP);
-
-            // Conversion GN F (principal uniquement)
+            // 4) Conversion du principal en GNF (les frais ne sont pas convertis)
             $montantGnf = (int) round($montantEuro * $taux, 0, PHP_ROUND_HALF_UP);
-            $totalGnf   = $montantGnf;
+            $totalGnf   = $montantGnf; // pas de frais en GNF
 
-            // Transfert
+            // 5) Persistance
             $transfert = Transfert::create([
-                'user_id'          => $userId,
-                'beneficiaire_id'  => $beneficiaireId,
-                'devise_source_id' => 1,         // EUR
-                'devise_cible_id'  => 2,         // GNF
-                'taux_echange_id'  => $tauxId,
-                'taux_applique'    => $taux,     // ENTIER
-                'montant_envoie'   => $montantEuro,
-                'frais'            => $fraisEuro,
-                'total_ttc'        => $totalEuro,
-                'montant_gnf'      => $montantGnf,
-                'total_gnf'        => $totalGnf,
-                'statut'           => Transfert::STATUT_ENVOYE,
-                'mode_reception'   => $modeReception,
+                'user_id'             => $userId,
+                'beneficiaire_id'     => (int) $request->beneficiaire_id,
+                'devise_source_id'    => 1, // EUR
+                'devise_cible_id'     => 2, // GNF
+                'taux_echange_id'     => $tauxEchange->id,
+                'taux_applique'       => $taux,
+                'montant_envoie'      => $montantEuro,
+                'frais'               => $fraisEuro,
+                'total_ttc'           => $totalEuro,
+                'amount'              => $montantGnf,
+                'total_gnf'           => $totalGnf,
+                'statut'              => Transfert::STATUT_ENVOYE,
+                'serviceId'           => $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY),
+                'recipientTel'        => $request->input('recipientTel'),        // ← Nouveau
+                'accountId'           => $request->input('accountId'),           // ← Nouveau
+                'customerPhoneNumber' => $request->input('customerPhoneNumber'), // ← Nouveau
+                'code'                => Transfert::generateUniqueCode(),
             ]);
 
-            // Facture (en €)
-            $facture = Facture::create([
-                'transfert_id'    => $transfert->id,
-                'type'            => 'transfert',
-                'statut'          => 'brouillon',
-                'envoye'          => false,
-                'nom_societe'     => 'FELLO',
-                'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
-                'phone_societe'   => 'Numéro de téléphone de la société',
-                'email_societe'   => 'contact@societe.com',
-                'total'           => $transfert->total_ttc,
-                'montant_du'      => $transfert->total_ttc,
-            ]);
+            // 6) Facture (en €)
+            $this->createFacture($transfert);
 
-            // Email (silencieux si échec)
-            try {
-                $to = $transfert->expediteur->email ?? $customerEmail;
-                if ($to) {
-                    Mail::to($to)->send(new TransfertNotification($transfert));
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Email transfert non envoyé: '.$e->getMessage());
-            }
+            // 7) Email (optionnel)
+            $this->envoyerEmailConfirmation($transfert);
 
-            // Marqueurs d’idempotence
-            $lockedMeta['transfert_id'] = $transfert->id;
-            if (isset($facture->id)) {
-                $lockedMeta['facture_id'] = $facture->id;
-            }
-            $locked->metadata = $lockedMeta;
-            $locked->save();
-        });
+            return $this->responseJson(true, 'Transfert effectué avec succès.', $transfert->fresh(), 201);
+
+        } catch (ValidationException $e) {
+            return $this->responseJson(false, 'Échec de la validation des données.', $e->errors(), 422);
+        } catch (Exception $e) {
+            \Log::error('Transfert KO', ['err' => $e->getMessage()]);
+            return $this->responseJson(false, 'Erreur lors de la création du transfert.', ['message' => $e->getMessage()], 500);
+        }
     }
 
-    /* -------------------------- Helpers métiers -------------------------- */
+    private function validateRequest(Request $request)
+    {
+        $serviceId = $request->input('serviceId', Transfert::SERVICE_ORANGE_MONEY);
+        
+        // Règles de base
+        $rules = [
+            'beneficiaire_id' => ['required', 'exists:beneficiaires,id'],
+            'taux_echange_id' => ['required', 'exists:taux_echanges,id'],
+            'montant_envoie'  => ['required', 'numeric', 'min:1', 'max:10000'],
+            'serviceId'       => ['nullable', 'in:'.implode(',', Transfert::SERVICES)],
+        ];
+
+        // Validation conditionnelle selon le type de service
+        if (in_array($serviceId, Transfert::SERVICES_TEL)) {
+            // Service utilisant le téléphone (Orange Money, MTN, etc.)
+            $rules['recipientTel'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['accountId'] = ['nullable']; // Non utilisé mais autorisé
+            $rules['customerPhoneNumber'] = ['nullable']; // Non requis pour ce type
+            
+        } elseif (in_array($serviceId, Transfert::SERVICES_ACCOUNT)) {
+            // Service utilisant un numéro de compte (KS Pay, Paycard, etc.)
+            $rules['accountId'] = ['required', 'string', 'max:50'];
+            $rules['customerPhoneNumber'] = ['required', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['recipientTel'] = ['nullable']; // Non utilisé mais autorisé
+            
+        } else {
+            // Par défaut, au moins l'un des deux doit être fourni
+            $rules['recipientTel'] = ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+            $rules['accountId'] = ['nullable', 'string', 'max:50'];
+            $rules['customerPhoneNumber'] = ['nullable', 'string', 'max:20', 'regex:/^[0-9+\-\s()]+$/'];
+        }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        // Validation supplémentaire : au moins recipientTel OU accountId doit être fourni
+        $validator->after(function ($validator) use ($request) {
+            if (empty($request->recipientTel) && empty($request->accountId)) {
+                $validator->errors()->add(
+                    'recipientTel', 
+                    'Vous devez fournir soit un numéro de téléphone (recipientTel) soit un numéro de compte (accountId).'
+                );
+            }
+        });
+
+        return $validator;
+    }
 
     private function calculerFraisEuro(float $montantEuro): float
     {
@@ -260,19 +144,38 @@ class WebhookController extends Controller
         if (!$frais) return 0.0;
 
         if ($frais->type === 'pourcentage') {
-            $pourcent = (float) $frais->valeur; // ex: 5 => 5%
+            $pourcent = (float) $frais->valeur;
             return round($montantEuro * ($pourcent / 100.0), 2, PHP_ROUND_HALF_UP);
         }
 
         return round((float) $frais->valeur, 2, PHP_ROUND_HALF_UP);
     }
 
-    private function toArraySafe($meta): array
+    private function createFacture(Transfert $t): void
     {
-        if (is_array($meta)) return $meta;
-        if (is_object($meta) && method_exists($meta, 'toArray')) {
-            return $meta->toArray();
+        Facture::create([
+            'transfert_id'    => $t->id,
+            'type'            => 'transfert',
+            'statut'          => 'brouillon',
+            'envoye'          => false,
+            'nom_societe'     => 'FELLO',
+            'adresse_societe' => '5 allé du Foehn Ostwald 67540, Strasbourg.',
+            'phone_societe'   => 'Numéro de téléphone de la société',
+            'email_societe'   => 'contact@societe.com',
+            'total'           => $t->total_ttc,
+            'montant_du'      => $t->total_ttc,
+        ]);
+    }
+
+    private function envoyerEmailConfirmation(Transfert $transfert): void
+    {
+        $email = $transfert->expediteur?->email;
+        if ($email) {
+            try {
+                Mail::to($email)->send(new TransfertNotification($transfert));
+            } catch (\Throwable $e) {
+                \Log::warning('Email transfert non envoyé: '.$e->getMessage());
+            }
         }
-        return [];
     }
 }
