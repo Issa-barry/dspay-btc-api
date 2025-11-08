@@ -94,7 +94,7 @@
                                         </div>
 
                                         <div class="pt-3 sm:pt-5 lg:pt-0">
-                                            <h2 class="text-xl font-semibold text-black dark:text-white">DSPAY-v1</h2>
+                                            <h2 class="text-xl font-semibold text-black dark:text-white">DSPAY-v2</h2>
 
                                             <p class="mt-4 text-sm/relaxed">
                                                 Laravel has wonderful documentation covering every aspect of the framework. Whether you are a newcomer or have prior experience with Laravel, we recommend reading our documentation from beginning to end.
@@ -129,7 +129,7 @@ Des transferts rapides, fiables et adaptés à vos besoins.                     
                     </main>
 
                     <footer class="py-16 text-center text-sm text-black dark:text-white/70">
-                        V1.1.0 | 24.10.2025
+                        V2.0.0 | 08.11.2025
                       <!-- Laravel v{{ Illuminate\Foundation\Application::VERSION }} (PHP v{{ PHP_VERSION }})-->
                     </footer>
                 </div>
