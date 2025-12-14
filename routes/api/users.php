@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\MeController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\User\DeleteUserController;
 use App\Http\Controllers\User\ShowUserController;
@@ -18,6 +19,7 @@ Route::prefix('users')->name('users.')->group(function () {
 
     // ── PROTÉGÉ : tout le reste
     Route::middleware(['auth:sanctum','throttle:60,1'])->group(function () {
+       Route::get('me', MeController::class);
         Route::post('/employes/create', [EmployeCreateController::class, 'store'])->name('employes.store');
 
         Route::get('/all', [ShowUserController::class, 'index'])->name('index');
@@ -32,3 +34,4 @@ Route::prefix('users')->name('users.')->group(function () {
         Route::delete('/desaffecter-agence/{id}', [UserDesacfecterAgenceController::class, 'desaffecterAgence'])->name('desaffect')->whereNumber('id');
     });
 });
+ 
