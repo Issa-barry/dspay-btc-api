@@ -28,36 +28,37 @@ class AdminUserSeeder extends Seeder
             return;
         }
 
-        // 3) Créer l'utilisateur admin
+        // 3) Créer l'utilisateur admin (adresse intégrée dans users)
         $admin = User::create([
-            'civilite' => 'Mr',
-            'prenom' => 'Nom',
-            'nom' => 'Admin',
-            'email' => 'issabarry67@gmail.com',
-            'phone' => '0123456789',
+            'civilite'       => 'Mr',
+            'prenom'         => 'Nom',
+            'nom'            => 'Admin',
+            'email'          => 'issabarry67@gmail.com',
+            'phone'          => '0758855039',
             'date_naissance' => '1985-01-01',
-            'password' => Hash::make('Jeux@2019'),
-            'role_id' => 1, // si tu gardes ce champ en DB
-        ]);
+            'password'       => Hash::make('Jeux@2019'),
+            'role_id'        => $role->id,
 
-        // 4) Créer l’adresse liée à l’utilisateur (remplit user_id automatiquement)
-        // IMPORTANT : nécessite la relation User::adresse() = hasOne(Adresse::class)
-        $admin->adresse()->create([
-            'pays' => 'France',
-            'adresse' => '123 rue Admin',
+            // ✅ Adresse intégrée dans users
+            'pays'               => 'France',
+            'country_code'               => 'FR',        // ISO2 : FR
+            'dial_code'          => '+33',       // Indicatif international
+            'adresse'            => '123 rue Admin',
             'complement_adresse' => 'Apt 45',
-            'ville' => 'Paris',
-            'code_postal' => '75000',
+            'ville'              => 'Paris',
+            'code_postal'        => '75000',
+            'region'             => null,
+            'quartier'           => null,
         ]);
 
-        // 5) Assigner le rôle Spatie
+        // 4) Assigner le rôle Spatie
         $admin->assignRole($role); // ou ->assignRole('Administrateur')
 
-        // 6) Optionnel : envoyer la notif de vérification email (à activer seulement si mail config OK)
+        // 5) Optionnel : envoyer la notification de vérification de l'email
         // $admin->sendEmailVerificationNotification();
 
         $this->command->info('Admin user has been created successfully!');
     }
 }
 
-//php artisan db:seed --class=AdminUserSeeder
+// php artisan db:seed --class=AdminUserSeeder

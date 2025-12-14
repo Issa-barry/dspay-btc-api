@@ -4,8 +4,7 @@ use App\Http\Controllers\Auth\CheckTokenController;
 use App\Http\Controllers\Auth\LoginBearerController;
 use App\Http\Controllers\Auth\LoginStatelessController;
 use App\Http\Controllers\Auth\LogoutController;
-use App\Http\Controllers\Auth\MeController;
-use App\Http\Controllers\Auth\PasswordResetLinkController;
+ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\ResendVerificationController;
 use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\Auth\VerifyEmailController;
@@ -41,8 +40,6 @@ Route::post('/resend-verification-email', ResendVerificationController::class)
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', LogoutController::class)->name('auth.logout');
     Route::get('/check-token-header', CheckTokenController::class)->name('auth.checkToken');
-    Route::get('users/me', MeController::class);
-    Route::get('users/test-endpoint', [MeController::class, 'index'])->name('index');
-});
+ });
 
  
