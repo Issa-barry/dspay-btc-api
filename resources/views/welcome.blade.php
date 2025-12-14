@@ -94,7 +94,7 @@
                                         </div>
 
                                         <div class="pt-3 sm:pt-5 lg:pt-0">
-                                            <h2 class="text-xl font-semibold text-black dark:text-white">DSPAY-v2</h2>
+                                            <h2 class="text-xl font-semibold text-black dark:text-white">DSPAY-v3 (deploiment auto sur hostinger pre-pre)</h2>
 
                                             <p class="mt-4 text-sm/relaxed">
 paiement webhho                                            </p>
@@ -128,7 +128,7 @@ Des transferts rapides, fiables et adaptés à vos besoins.                     
                     </main>
 
                     <footer class="py-16 text-center text-sm text-black dark:text-white/70">
-                        V2.2.0 | 08.11.2025
+                        V2.2.0 | 14.12.2025
                       <!-- Laravel v{{ Illuminate\Foundation\Application::VERSION }} (PHP v{{ PHP_VERSION }})-->
                     </footer>
                 </div>
