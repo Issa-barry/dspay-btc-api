@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 | Public (pas de sanctum)
 |--------------------------------------------------------------------------
-*/
+*/ 
 
 Route::post('/login', LoginBearerController::class)->name('auth.login');
 
