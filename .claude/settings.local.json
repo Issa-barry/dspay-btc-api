@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan config:clear:*)",
+      "Bash(php artisan:*)",
+      "Bash(C:/laragon/bin/php/php-8.3.15-Win32-vs16-x64/php.exe artisan config:clear:*)",
+      "Bash(where:*)"
+    ]
+  }
+}

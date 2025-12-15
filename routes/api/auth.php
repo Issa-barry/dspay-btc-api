@@ -25,10 +25,20 @@ Route::post('/login-stateless', LoginStatelessController::class)->name('auth.log
 Route::post('/sendResetPasswordLink', PasswordResetLinkController::class)->name('auth.sendReset');
 Route::post('/ResetPassword',        ResetPasswordController::class)->name('auth.reset');
 
+// Vérification par lien (ancienne méthode)
 Route::get('/verify-email/{id}/{hash}', VerifyEmailController::class)
     ->middleware('signed')
     ->name('verification.verify');
 
+// Vérification par code à 4 chiffres (nouvelle méthode)
+Route::post('/verify-email-code', [VerifyEmailController::class, 'verifyWithCode'])
+    ->name('verification.verify.code');
+
+// Renvoyer le code de vérification
+Route::post('/resend-verification-code', [VerifyEmailController::class, 'resendCode'])
+    ->name('verification.resend.code');
+
+// Ancienne route (à conserver pour compatibilité)
 Route::post('/resend-verification-email', ResendVerificationController::class)
     ->name('auth.resendVerification');
 
