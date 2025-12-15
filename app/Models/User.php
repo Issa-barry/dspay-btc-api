@@ -19,6 +19,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email', 'password', 'reference', 'civilite', 'nom', 'prenom',
         'phone', 'dial_code', 'date_naissance', 'role_id', 'statut',
         'pays', 'country_code', 'adresse', 'complement_adresse', 'ville', 'quartier', 'region', 'code_postal',
+        'verification_code', 'verification_code_expires_at',
     ];
 
     protected $appends = ['nom_complet'];
@@ -28,6 +29,7 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         return [
             'email_verified_at' => 'datetime',
+            'verification_code_expires_at' => 'datetime',
             'password' => 'hashed',
         ];
     }
@@ -328,5 +330,46 @@ class User extends Authenticatable implements MustVerifyEmail
             now()->addMinutes(60),
             ['id' => $notifiable->getKey(), 'hash' => sha1($notifiable->getEmailForVerification())]
         );
+    }
+
+    /**
+     * Générer un code de vérification à 4 chiffres
+     */
+    public function generateVerificationCode(): string
+    {
+        $code = str_pad((string)rand(0, 9999), 4, '0', STR_PAD_LEFT);
+
+        $this->verification_code = $code;
+        $this->verification_code_expires_at = now()->addMinutes(15); // Expire après 15 minutes
+        $this->save();
+
+        return $code;
+    }
+
+    /**
+     * Vérifier si le code de vérification est valide
+     */
+    public function verifyCode(string $code): bool
+    {
+        if ($this->verification_code !== $code) {
+            return false;
+        }
+
+        if ($this->verification_code_expires_at && $this->verification_code_expires_at->isPast()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Marquer l'email comme vérifié et supprimer le code
+     */
+    public function markEmailAsVerifiedWithCode(): void
+    {
+        $this->markEmailAsVerified();
+        $this->verification_code = null;
+        $this->verification_code_expires_at = null;
+        $this->save();
     }
 }

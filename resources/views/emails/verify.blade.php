@@ -21,31 +21,29 @@
     <tr><td style="padding:24px 28px 0 28px;font-weight:700;letter-spacing:.2px;">{{ $appName }}</td></tr>
     <!-- title -->
     <tr><td style="padding:8px 28px 0 28px;">
-      <h1 style="margin:0;font-size:22px;line-height:1.25;color:{{ $text }};">Valider la création de votre compte</h1>
+      <h1 style="margin:0;font-size:22px;line-height:1.25;color:{{ $text }};">Code de vérification</h1>
     </td></tr>
     <!-- intro -->
     <tr><td style="padding:8px 28px 0 28px;color:{{ $muted }};">
       @if(!empty($userName)) Bonjour {{ $userName }} 👋,@else Bonjour 👋,@endif
     </td></tr>
     <tr><td style="padding:6px 28px 0 28px;color:{{ $muted }};">
-      Cliquez sur le bouton ci-dessous pour confirmer votre adresse e-mail et activer votre compte.
+      Veuillez utiliser le code ci-dessous pour confirmer votre adresse e-mail et activer votre compte.
     </td></tr>
-    <!-- CTA (bulletproof) -->
-    <tr><td align="left" style="padding:18px 28px 6px 28px;">
-      <!--[if mso]>
-      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="{{ $url }}" arcsize="20%" strokecolor="{{ $primary }}" fillcolor="{{ $primary }}" style="height:44px;v-text-anchor:middle;width:240px;">
-        <w:anchorlock/><center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;">Valider mon compte</center>
-      </v:roundrect>
-      <![endif]-->
-      <!--[if !mso]><!-- -->
-      <a href="{{ $url }}" style="display:inline-block;background:{{ $primary }};color:#fff;text-decoration:none;padding:12px 18px;border-radius:12px;font-weight:600;">Valider mon compte</a>
-      <!--<![endif]-->
+    <!-- CODE (grand et visible) -->
+    <tr><td align="center" style="padding:24px 28px;">
+      <div style="background:#F1F5F9;border:2px dashed {{ $primary }};border-radius:12px;padding:20px;display:inline-block;">
+        <div style="font-size:32px;font-weight:700;letter-spacing:8px;color:{{ $text }};font-family:monospace;">{{ $code }}</div>
+      </div>
+    </td></tr>
+    <!-- Expiration -->
+    <tr><td style="padding:0px 28px 0 28px;font-size:13px;color:{{ $muted }};text-align:center;">
+      Ce code expire dans {{ $expiresIn }} minutes
     </td></tr>
     <!-- notes -->
-    <tr><td style="padding:8px 28px 0 28px;font-size:13px;color:{{ $muted }};">Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet e-mail.</td></tr>
+    <tr><td style="padding:16px 28px 0 28px;font-size:13px;color:{{ $muted }};">Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail.</td></tr>
     <tr><td style="padding:8px 28px 24px 28px;font-size:13px;color:{{ $muted }};">
-      Si le bouton ne fonctionne pas, copiez-collez ce lien dans votre navigateur :<br>
-      <a href="{{ $url }}" style="color:{{ $primary }};text-decoration:none;word-break:break-all;">{{ $url }}</a>
+      Pour des raisons de sécurité, ne partagez jamais ce code avec qui que ce soit.
     </td></tr>
     <!-- footer -->
     <tr><td style="border-top:1px solid #EEF2FF;padding:16px 28px 24px 28px;color:#94A3B8;font-size:12px;">

@@ -26,6 +26,10 @@ return new class extends Migration
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
 
+            $table->string('verification_code', 4)->nullable();
+            $table->timestamp('verification_code_expires_at')->nullable();
+        
+
             // ✅ Index composite pour permettre les doublons de phone
             // mais distinguer par country_code (ex: +262 pour Réunion et Mayotte)
             $table->index(['phone', 'country_code'], 'idx_phone_country');
@@ -55,6 +59,8 @@ return new class extends Migration
             $table->string('quartier')->nullable();
             $table->string('region')->nullable();
             $table->string('code_postal')->nullable();
+
+           
 
             // Laravel
             $table->rememberToken();

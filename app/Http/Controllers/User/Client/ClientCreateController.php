@@ -25,7 +25,7 @@ class ClientCreateController extends Controller
     public function store(Request $request)
     {
         try {
-            // 1) Validation (pays obligatoire + dial_code optionnel)
+            // 1) Validation - ✅ Accepter "code" OU "country_code"
             $validated = $request->validate([
                 'civilite'        => 'nullable|in:Mr,Mme,Mlle,Autre',
                 'nom'             => 'required|string|max:100',
@@ -35,10 +35,11 @@ class ClientCreateController extends Controller
                 'date_naissance'  => 'nullable|date',
                 'password'        => 'required|string|min:8|confirmed',
 
-                // Adresse / Pays
+                // Adresse / Pays - ✅ Accepter les deux
                 'pays'               => 'required|string|max:255',
-                'code'               => 'nullable|string|max:10', // ISO2 : FR, GN...
-                'dial_code'          => 'nullable|string|max:5',  // +33, +224...
+                'code'               => 'nullable|string|max:10',        // Pour compatibilité
+                'country_code'       => 'nullable|string|max:2',         // Nouveau standard
+                'dial_code'          => 'nullable|string|max:5',
 
                 'adresse'            => 'nullable|string|max:255',
                 'complement_adresse' => 'nullable|string|max:255',
@@ -54,24 +55,22 @@ class ClientCreateController extends Controller
             $validated['email']  = strtolower(trim($validated['email']));
             $validated['pays']   = mb_strtoupper(trim($validated['pays']));
 
-            // ISO2 pour parsing téléphone (défaut FR)
-            $countryIso2 = strtoupper($validated['code'] ?? 'FR');
+            // ✅ Unifier country_code (prendre country_code OU code)
+            $countryCode = strtoupper($validated['country_code'] ?? $validated['code'] ?? 'FR');
 
             // 3) Normalisation téléphone en E.164
             try {
-                $validated['phone'] = PhoneNumber::parse($validated['phone'], $countryIso2)
-                    ->format(PhoneNumberFormat::E164); // ex: +33612345678
+                $validated['phone'] = PhoneNumber::parse($validated['phone'], $countryCode)
+                    ->format(PhoneNumberFormat::E164);
             } catch (PhoneNumberParseException $e) {
                 return $this->responseJson(false, 'Numéro de téléphone invalide pour le pays sélectionné.', [
-                    'phone' => ["Numéro invalide pour le pays {$countryIso2}."]
+                    'phone' => ["Numéro invalide pour le pays {$countryCode}."]
                 ], 422);
             }
 
-            // 3.a) Déduire dial_code si absent (à partir du phone E.164)
-            // Ex: +33612345678 => +33
+            // 3.a) Déduire dial_code si absent
             $dialCode = $validated['dial_code'] ?? null;
             if (!$dialCode) {
-                // version simple et robuste: on extrait le country calling code via Brick
                 try {
                     $parsed = PhoneNumber::parse($validated['phone']);
                     $dialCode = '+' . $parsed->getCountryCode();
@@ -88,7 +87,7 @@ class ClientCreateController extends Controller
             }
 
             // 4) Transaction : user -> rôle
-            $user = DB::transaction(function () use ($validated, $dialCode) {
+            $user = DB::transaction(function () use ($validated, $dialCode, $countryCode) {
                 $role = Role::where('name', 'Client')->first();
                 if (!$role) {
                     throw new Exception("Le rôle Client est introuvable. Veuillez le créer d'abord.");
@@ -100,17 +99,14 @@ class ClientCreateController extends Controller
                     'prenom'         => $validated['prenom'],
                     'email'          => $validated['email'],
                     'phone'          => $validated['phone'],
-
-                    // ✅ pas de null
                     'date_naissance' => $validated['date_naissance'] ?? '9999-12-31',
-
                     'password'       => Hash::make($validated['password']),
                     'role_id'        => $role->id,
 
-                    // Adresse intégrée
+                    // ✅ Utiliser country_code (colonne unifiée)
                     'pays'               => $validated['pays'],
-                    'code'               => $validated['code'] ?? null,      // ISO2
-                    'dial_code'          => $dialCode,                        // ✅ +33/+224
+                    'country_code'       => $countryCode,    // ✅ Colonne standard
+                    'dial_code'          => $dialCode,
                     'adresse'            => $validated['adresse'] ?? null,
                     'complement_adresse' => $validated['complement_adresse'] ?? null,
                     'ville'              => $validated['ville'] ?? null,
@@ -132,7 +128,7 @@ class ClientCreateController extends Controller
 
                 return $this->responseJson(
                     true,
-                    "Client créé, mais l'email de vérification n'a pas pu être envoyé.",
+                    "Compte créé, mais l'email de vérification n'a pas pu être envoyé.",
                     $user->load('roles'),
                     201
                 );
@@ -141,7 +137,7 @@ class ClientCreateController extends Controller
             // 6) OK
             return $this->responseJson(
                 true,
-                'Client créé avec succès. Veuillez vérifier votre email.',
+                'Compte créé avec succès. Veuillez vérifier votre email.',
                 $user->load('roles'),
                 201
             );
