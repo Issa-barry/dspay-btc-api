@@ -19,6 +19,8 @@ class Beneficiaire extends Model
 
     protected $appends = ['nom_complet'];
 
+ 
+
     public function user()
     {
         return $this->belongsTo(User::class);

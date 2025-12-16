@@ -33,7 +33,7 @@ Route::middleware(['auth:sanctum', 'throttle:60,1'])
             ->name('updateById')->whereNumber('id');
         Route::put('/updateByCode/{code}', [TransfertUpdateController::class, 'updateByCode'])
             ->name('updateByCode')->where('code', '[A-Za-z0-9\-]+');
-
+ 
         // delete
         Route::delete('/deleteById/{id}', [TransfertDeleteController::class, 'deleteById'])
             ->name('deleteById')->whereNumber('id');
