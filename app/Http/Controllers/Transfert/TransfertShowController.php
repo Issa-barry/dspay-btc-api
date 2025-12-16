@@ -226,13 +226,21 @@ class TransfertShowController extends Controller
             });
 
             // 🔢 numérique (égalité)
+            // 🔢 numérique (partiel) : 53 => match 52.5 / 535000 / 105.0
             if ($isNumeric) {
-                $q->orWhere('total_ttc', $num)
-                  ->orWhere('total_gnf', $num)
-                  ->orWhere('amount', $num)
-                  ->orWhere('montant_envoie', $num)
-                  ->orWhere('frais', $num);
+                // On recherche "53" dans la représentation texte du champ
+                $like = "%{$s}%";
+
+                $q->orWhereRaw("CAST(total_ttc AS CHAR) LIKE ?", [$like])
+                ->orWhereRaw("CAST(total_gnf AS CHAR) LIKE ?", [$like])
+                ->orWhereRaw("CAST(amount AS CHAR) LIKE ?", [$like])
+                ->orWhereRaw("CAST(montant_envoie AS CHAR) LIKE ?", [$like])
+                ->orWhereRaw("CAST(frais AS CHAR) LIKE ?", [$like]);
+
+                // Bonus: si l'utilisateur tape "53€" ou "53 GNF" côté front, on garde juste les chiffres
+                // (optionnel: à faire plutôt côté front)
             }
+
         });
     }
 }
